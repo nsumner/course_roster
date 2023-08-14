@@ -1,0 +1,132 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "course_roster"
+dynamic = ["version"]
+description = "Tools for managing team projects in courses."
+authors = [
+  { name = "Nick Sumner", email = "wsumner@sfu.ca" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+keywords = ["course", "team", "feedback"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Education",
+    "Topic :: Utilities",
+]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pandas",
+  "matplotlib",
+  "seaborn",
+  "tqdm",
+]
+
+[project.optional-dependencies]
+summaries = [
+  "wordcloud>=1.8",
+  "sumy>=0.11.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/nsumner/course_roster"
+"Bug Tracker" = "https://github.com/nsumner/course_roster/issues"
+
+[project.scripts]
+analyze-peer-evaluations = "course_roster.analyze_peer_evaluations:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "course_roster.__version__" }
+
+[tool.mypy]
+scripts_are_modules = true
+show_traceback = true
+show_error_codes = true
+
+strict = true
+warn_unreachable = true
+enable_error_code = [
+    "redundant-expr",
+    "truthy-bool",
+    "ignore-without-code",
+    "unused-awaitable",
+]
+
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+select = [
+    "ANN", # annotations
+    "B", # bugbear
+    "C4", # comprehensions
+    "COM", # trailing comma
+    "DJ", # Django
+    "DTZ", # naive datetime
+    "E", # style errors
+    "EXE", # shebang
+    "F", # flakes
+    "FLY", # string formatting
+    "G", # logging format
+    "I", # import sorting
+    "INT", # gettext
+    "ISC", # string concatenation
+    "N", # naming
+    "PERF", # performance
+    "PGH", # pygrep-hooks
+    "PIE", # miscellaneous
+    "PL", # pylint
+    "PYI", # typing stubs
+    "Q", # quotes
+    "RSE", # raise
+    "RUF", # Ruff
+    "S", # security
+    "SIM", # simplify
+    "T10", # debugger
+    "UP", # upgrade
+    "W", # style warnings
+    "YTT", # sys.version
+]
+ignore = [
+    "ANN101",  # Missing type annotation for `self` in method
+    "ANN003", # Missing type annotation for `**kwargs`
+    "DTZ005", # The use of `datetime.datetime.now()` without `tz` argument is not allowed
+    "PGH003", # Use specific error codes when ignoring type issues TODO: Reconsider?
+    "PLR0913", # Function or method takes too many arguments TODO: Reconsider?
+    "Q000", # Single quotes found but double quotes preferred
+    "S101", # Use of `assert` detected
+    "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "UP007" # Use X | Y for type annotations
+]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.per-file-ignores]
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = '''fixme,
+        invalid-name,
+        missing-module-docstring,
+        missing-class-docstring,
+        missing-function-docstring
+'''
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--durations=20 --maxfail=5"
+testpaths = [
+    "tests",
+]

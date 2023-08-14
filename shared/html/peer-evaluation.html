@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Iteration and Peer Project Evaluation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+
+body {
+  width: 70%;
+  min-width: 830px;
+  max-width: 1000px;
+  margin: auto;
+}
+h1 {
+  color: maroon;
+  margin-left: 40px;
+}
+legend {
+  font-size: 150%;
+}
+.spacercol {
+  width: 15px;
+}
+
+.radio_1_3, .radio_1_5 {
+  color: #BB0000;
+}
+.radio_3_3, .radio_5_5 {
+  color: #0000FF;
+}
+.radio_4_5 {
+  color: #000099;
+}
+.radio_2_5 {
+  color: #770000;
+}
+
+  </style>
+</head>
+
+<body>
+  <div class="content">
+    <h1>Iteration and Peer Project Evaluation</h1>
+
+    <p>
+    This form provides a way for you to reflect on the performance of yourself
+    and your peers during the project. The results provide me a means of
+    analyzing groups and individuals in order to find strengths and problem
+    areas.
+    </p>
+
+    <p>
+    Note: this is different than a group retrospective or reflection. While a
+    retrospective is done openly within a group, this personal reflection will
+    not be seen by your groupmates. However, the results may help guide me in
+    identifying problems that I may take action on.
+    </p>
+    
+    <p>
+    The survey is completed locally on your machine. When you click "complete",
+    it will generate a JSON file for you to save and upload to CourSys.
+    </p>
+
+    <form id="evaluation-form">
+      <label for="username">SFU Username</label>
+      <input name="username" type="text" required>
+
+
+      <p><fieldset name="overall">
+        <legend>Overall Team Process</legend>
+Please rank how much you agree with the following statements on the scale<br />
+1 (strongly disagree) - 5 (strongly agree)<br /><br />
+
+        <table>
+          <thead>
+            <tr> <th>Statement</th> <th class="spacercol" /> <th colspan="5">Rating</th> </tr>
+          </thead>
+          <tbody id="overall-table"> </tbody>
+        </table>
+      </fieldset></p>
+
+
+      <p><fieldset name="individual">
+        <legend>Individual Contributions</legend>
+
+Next, rank yourself and each of your teammates for:<br />
+technical skill, productivity, team work, and communication on the scale<br />
+1 (poor) - 3 (good)<br /><br />
+
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th class="spacercol"/> <th colspan="3">Technical</th>
+              <th class="spacercol"/> <th colspan="3">Productivity</th>
+              <th class="spacercol"/> <th colspan="3">Team Work</th>
+              <th class="spacercol"/> <th colspan="3">Skill</th>
+            </tr>
+          </thead>
+          <tbody id="individual-body"> </tbody>
+        </table>
+
+      </fieldset></p>
+
+      <p><fieldset name="freeform">
+        <legend>Freeform comments</legend>
+
+        <label for="wentwell">What went well?</label><br/>
+        <textarea name="wentwell" rows="15" cols="100"></textarea><br /><br />
+
+        <label for="wentpoorly">What went poorly?</label><br/>
+        <textarea name="wentpoorly" rows="15" cols="100"></textarea><br /><br />
+
+        <label for="othercomments">Are there any other issues you have encountered or comments that you have so far?</label><br/>
+        <textarea name="othercomments" rows="15" cols="100"></textarea>
+      </fieldset></p>
+
+      <div style="text-align: center;">
+        <button id="completion" type="submit">Complete</button>
+      </div>
+    </form>
+    <p></p>
+  <div>
+
+<script>
+"use strict";
+
+function parse_and_validate_stub(buffer) {
+  try {
+    const json = JSON.parse(buffer);
+    if (json.every((student) => "name" in student && "email" in student)) {
+      return json;
+    }
+    console.log("Non-conforming group info in JSON object.")
+  } catch(e) {
+    // Convert exceptions into error values
+    console.log("Invalid JSON object passed in.");
+  }
+  return null;
+}
+
+
+function get_group_info() {
+  let group_info = null;
+  let stub = prompt("Please enter the provided JSON stub for your group:");
+  while (true) {
+    group_info = parse_and_validate_stub(stub);
+    if (group_info) {
+      return group_info;
+    }
+    stub = prompt("Invalid stub. Please enter the provided JSON stub for your group:");
+  }
+}
+
+
+function create_rating_radio(name, rating) {
+  const radio = document.createElement("input");
+  radio.setAttribute("type", "radio");
+  radio.setAttribute("name", name);
+  radio.setAttribute("value", rating);
+  radio.setAttribute("required", true);
+
+  const label = document.createElement("label");
+  label.appendChild(document.createTextNode(rating));
+  label.appendChild(radio);
+  return label;
+}
+
+
+function insert_rating_table_row(table_body, row_text, sections, max_rating, radio_namer) {
+  const row = table_body.insertRow();
+
+  const label_cell = row.insertCell(-1);
+  label_cell.appendChild(document.createTextNode(row_text));
+  
+  for (const section of sections) {
+    const spacer_cell = row.insertCell(-1);
+
+    for (let rating = 1; rating <= max_rating; ++rating) {
+      const rating_cell = row.insertCell(-1);
+      const radio_name = radio_namer(section);
+      rating_cell.appendChild(create_rating_radio(radio_name, rating));
+      rating_cell.classList.add("radio_" + rating + "_" + max_rating);
+    }
+  }
+}
+
+
+function create_overall_table(table_body, process_statements) {
+  const MAX_RATING = 5;
+  const SECTIONS = ["overall"];
+
+  for (const [statement_id, statement] of process_statements.entries()) {
+    const namer = (section) => section + statement_id;
+    insert_rating_table_row(table_body, statement, SECTIONS, MAX_RATING, namer);
+  }
+}
+
+
+function create_individual_table(table_body, dimensions, group_info) {
+  const MAX_RATING = 3;
+
+  for (const student of group_info) {
+    const name = student["name"];
+    const email = student["email"];
+    const namer = (dimension) => dimension + "-" + email;
+    insert_rating_table_row(table_body, name, dimensions, MAX_RATING, namer);
+  }
+}
+
+
+function download_string(content, filename) {
+  const phantom_link = document.createElement('a');
+  phantom_link.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(content));
+  phantom_link.setAttribute('download', filename);
+  phantom_link.style.display = 'none';
+
+  document.body.appendChild(phantom_link);
+  phantom_link.click();
+  document.body.removeChild(phantom_link);
+}
+
+
+function extract_form_results() {
+  const form = document.getElementById('evaluation-form');
+  const formData = new FormData(form);
+  const result_map = new Map();
+  
+  result_map.set('student', formData.get("username"));
+
+  const overall_results = new Map();
+  for (const [statement_id, statement] of process_statements.entries()) {
+    overall_results.set(statement_id.toString(), formData.get("overall" + statement_id));
+  }
+  result_map.set("overall", Object.fromEntries(overall_results));
+
+  const individual_results = new Map();
+  for (const student of group_info) {
+    const email = student["email"]
+    const student_results = new Map();
+
+    for (const dimension of individual_dimensions) {
+      student_results.set(dimension, formData.get(dimension + "-" + email))
+    }
+
+    individual_results.set(email, Object.fromEntries(student_results));
+  }
+  result_map.set("individual", Object.fromEntries(individual_results));
+
+  result_map.set("wentwell", formData.get("wentwell"))
+  result_map.set("wentpoorly", formData.get("wentpoorly"))
+  result_map.set("othercomments", formData.get("othercomments"))
+
+  return JSON.stringify(Object.fromEntries(result_map));
+}
+
+
+function handle_submit(e) {
+  e.preventDefault();
+
+  const result_json = extract_form_results();
+  download_string(result_json, "evaluation.json");
+
+  console.log("Successfully completed.");
+}
+
+
+const group_info = get_group_info();
+
+const process_statements = [
+  "Work was divided fairly and reasonably.",
+  "The team developed a design based on the known requirements of the project.",
+  "The team developed goals based on the known requirements of the project.",
+  "The team achieved the goals set out for this iteration."
+];
+const overall_body = document.getElementById("overall-table");
+create_overall_table(overall_body, process_statements);
+
+const individual_dimensions = [
+  "technical",
+  "productivity",
+  "team work",
+  "skill"
+];
+const individual_body = document.getElementById("individual-body");
+create_individual_table(individual_body, individual_dimensions, group_info);
+
+document.getElementById('evaluation-form').addEventListener("submit", handle_submit);
+
+</script>
+</body>
+
+<html>
