@@ -40,6 +40,7 @@ summaries = [
 
 [project.scripts]
 analyze-peer-evaluations = "course_roster.analyze_peer_evaluations:main"
+roster-utils = "course_roster.roster_utils:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "course_roster.__version__" }

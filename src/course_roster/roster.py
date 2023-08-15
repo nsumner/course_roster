@@ -161,6 +161,9 @@ class GroupMatching:
     group_label: str
     assigned_label: str
 
+    def to_csv(self) -> str:
+        return self.table.to_csv()  # type: ignore[no-any-return]
+
 
 # Given a roster and column label for groups, assign each student another
 # group to collaborate with. Students should be assigned roughly uniformly
