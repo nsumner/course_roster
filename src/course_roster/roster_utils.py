@@ -43,8 +43,10 @@ def _show_json_groups(students: roster.Roster,
                       grouper: Grouper,
                       group_column: str,
                       group_size: int) -> None:
-    for _, group_line in roster.get_group_stubs(students, group_column):
+    for group, group_line in roster.get_group_stubs(students, group_column):
+        print(group)
         print(group_line)
+        print()
 
 
 #############################################################################
@@ -141,10 +143,10 @@ def _random_roster(size_as_str: str) -> roster.Roster:
 
 def main() -> None:
     core_actions = {
-        'save':                  Action(_do_nothing, True),
-        'assign-groups':         Action(_assign_groups, True),
-        'assign-across-groups':  Action(_assign_across_groups, True),
-        'show-json-groups': Action(_show_json_groups, True),
+        'save':                 Action(_do_nothing,           True),
+        'assign-groups':        Action(_assign_groups,        True),
+        'assign-across-groups': Action(_assign_across_groups, False),
+        'show-json-groups':     Action(_show_json_groups,     False),
     }
     parser = argparse.ArgumentParser(description='')
 
