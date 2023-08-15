@@ -120,8 +120,8 @@ def to_roster_csv(roster: Roster, path: Path) -> None:
 
 def group_students(roster: Roster,
                    label: str,
-                   namer: Callable[[str, str], str]) -> None:
-    def wrapper(x: pd.Series) -> str:
+                   namer: Callable[[str, str], Optional[str]]) -> None:
+    def wrapper(x: pd.Series) -> Optional[str]:
         return namer(x.name, x.Email)
 
     roster.table[label] = roster.table.apply(wrapper, axis=1)

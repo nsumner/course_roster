@@ -3,7 +3,7 @@
 import argparse
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import Optional, TypeAlias
 
 from . import roster
 
@@ -82,25 +82,31 @@ def _parse_coursys_groups(possible_path: str) -> dict[str, str]:
         assert group_chunk.startswith('g-')
         group_name = group_chunk[2:]
 
-        return group_name, student_chunk.split(',')
+        return group_name, student_chunk.strip().split(',')
 
-    return {
-        student: group
-        for line in lines
-        for group, students in parse_group_line(line)
-        for student in students
-    }
+    group_map = {}
+    for line in lines:
+        group, students = parse_group_line(line)
+        for student in students:
+            group_map[student] = group
+
+    return group_map
 
 
 def _create_coursys_grouper(possible_path: str) -> Grouper:
     coursys_groups = _parse_coursys_groups(possible_path)
 
+    def mapper(uid: str, email: str) -> Optional[str]:
+        if email in coursys_groups:
+            return coursys_groups[email]
+        # If no group is found for the student, we don't want to provide
+        # any mapping at all, so None should indicate that in Pandas
+        return None
+
     def create_named_groups(students: roster.Roster,
                             group_column: str,
                             group_size: int) -> None:
-        return roster.group_students(students,
-                                     group_column,
-                                     lambda uid, email: coursys_groups[email])
+        return roster.group_students(students, group_column, mapper)
     return create_named_groups
 
 
@@ -113,7 +119,7 @@ def _read_roster_csv(possible_path: str) -> roster.Roster:
 
 
 def _read_sims_csv(possible_path: str) -> roster.Roster:
-    return roster.from_roster_csv(possible_path)
+    return roster.from_sims_csv(possible_path)
 
 
 def _random_roster(size_as_str: str) -> roster.Roster:
