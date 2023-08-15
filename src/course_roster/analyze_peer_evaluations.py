@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-#
-# Required dependencies:
-#    numpy, pandas, matplotlib, seaborn, tqdm
-# Optional dependencies
-#    wordcloud, sumy
-#
-# Install most prerequisites with:
-#    apt-get install python3-pandas python3-seaborn python3-tqdm python3-wordcloud
-#
-# Install sumy into a virtualenv with:
-#    python3 -m venv --system-site-packages venv
-#    source venv/bin/activate
-#    pip install sumy
-#    python -c 'import nltk; nltk.download("punkt")'
-#
-# Using sumy also requires running the script within the virtualenv
 
 import argparse
 import datetime
@@ -23,6 +7,7 @@ import os
 import random
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from math import ceil
 from typing import Optional, TypeAlias
 
@@ -72,6 +57,7 @@ OVERALL = [
     'The team developed \ngoals based on the known\n requirements of the project.',
     'The team achieved the goals \nset out for this iteration.',
 ]
+OVERALL_RANKS = 5
 
 
 DIMENSIONS = [
@@ -80,6 +66,24 @@ DIMENSIONS = [
     'team work',
     'skill',
 ]
+DIMENSION_RANKS = 3
+
+
+@dataclass
+class EvalConfig:
+    overall: list[str]
+    overall_ranks: int
+
+    dimensions: list[str]
+    dimension_ranks: int
+
+
+@dataclass
+class AnalysisContext:
+    results: pd.DataFrame
+    group_name: str
+    pdf: PdfPages
+    config: EvalConfig
 
 
 #############################################################################
@@ -164,12 +168,13 @@ def construct_histogram(data: pd.DataFrame,
 
 
 def overall_histogram(df: pd.DataFrame,
-                      container: mpl.figure.Figure) -> None:
+                      container: mpl.figure.Figure,
+                      config: EvalConfig) -> None:
     min_rank = 1
-    max_rank = 5
-    axes = container.subplots(1, len(OVERALL))
+    max_rank = config.overall_ranks
+    axes = container.subplots(1, len(config.overall))
 
-    for index, (axis, statement) in enumerate(zip(axes, OVERALL, strict=True)):
+    for index, (axis, statement) in enumerate(zip(axes, config.overall, strict=True)):
         label = f'overall{index}'
 
         # Filter out invalid data
@@ -179,21 +184,23 @@ def overall_histogram(df: pd.DataFrame,
 
 def individual_histogram(df: pd.DataFrame,
                          container: mpl.figure.Figure,
+                         config: EvalConfig,
                          compact: bool = False,
                          markers: Optional[Sequence[Optional[Sequence[BinNote]]]] = None) -> None:
     min_rank = 1
-    max_rank = 3
+    max_rank = config.dimension_ranks
+    num_dimensions = len(config.dimensions)
     if compact:
-        spec = container.add_gridspec(nrows=1, ncols=len(DIMENSIONS), wspace=0, hspace=0)
-        axes = [container.add_subplot(spec[0, col]) for col in range(len(DIMENSIONS))]
+        spec = container.add_gridspec(nrows=1, ncols=num_dimensions, wspace=0, hspace=0)
+        axes = [container.add_subplot(spec[0, col]) for col in range(num_dimensions)]
     else:
-        axes = container.subplots(1, len(DIMENSIONS))
+        axes = container.subplots(1, num_dimensions)
 
     if not markers:
-        markers = [None for x in DIMENSIONS]
+        markers = [None for x in config.dimensions]
 
     strip_y = False
-    for axis, label, marker in zip(axes, DIMENSIONS, markers, strict=True):
+    for axis, label, marker in zip(axes, config.dimensions, markers, strict=True):
         # Filter out invalid data
         view = df[df[label].between(min_rank, max_rank)]
         construct_histogram(view, label, container, axis, max_rank, label, strip_y, marker)
@@ -246,38 +253,38 @@ def create_text_summary(text: str, axis: mpl.axes.Axes) -> None:
 
 # Composing analysis
 
-def quantitative_summary_page(df: pd.DataFrame, group_name: str) -> None:
+def quantitative_summary_page(context: AnalysisContext) -> None:
     fig = plt.figure(constrained_layout=True)
-    fig.suptitle(f'Analysis for {group_name}', fontsize=12)
+    fig.suptitle(f'Analysis for {context.group_name}', fontsize=12)
     (overall_fig, of_self_fig, of_others_fig) = fig.subfigures(nrows=3, ncols=1)
 
     overall_fig.suptitle("Overall project status assessment", fontsize=10)
-    overall_histogram(df, overall_fig)
+    overall_histogram(context.results, overall_fig, context.config)
 
     # Collapse the self assessments
     self_frame = pd.DataFrame({
-        dimension: df['self ' + dimension]
-        for dimension in DIMENSIONS
+        dimension: context.results['self ' + dimension]
+        for dimension in context.config.dimensions
     })
     of_self_fig.suptitle("Individual assessment of self", fontsize=10)
-    individual_histogram(self_frame, of_self_fig)
+    individual_histogram(self_frame, of_self_fig, context.config)
 
     # Collapse the incoming assessments
     incoming_frame = pd.DataFrame({
-        dimension: df['incoming ' + dimension].sum()
-        for dimension in DIMENSIONS
+        dimension: context.results['incoming ' + dimension].sum()
+        for dimension in context.config.dimensions
     })
     of_others_fig.suptitle("Individual assessment of peers", fontsize=10)
-    individual_histogram(incoming_frame, of_others_fig)
+    individual_histogram(incoming_frame, of_others_fig, context.config)
 
 
-def text_response_summary_page(df: pd.DataFrame, group_name: str) -> None:
-    wentwell = ' '.join(df['wentwell'].tolist()).strip()
-    wentpoorly = ' '.join(df['wentpoorly'].tolist()).strip()
-    other_comments = ' '.join(df['othercomments'].tolist()).strip()
+def text_response_summary_page(context: AnalysisContext) -> None:
+    wentwell = ' '.join(context.results['wentwell'].tolist()).strip()
+    wentpoorly = ' '.join(context.results['wentpoorly'].tolist()).strip()
+    other_comments = ' '.join(context.results['othercomments'].tolist()).strip()
 
     figure = plt.figure()
-    figure.suptitle(f'Summaries for {group_name}', fontsize=12)
+    figure.suptitle(f'Summaries for {context.group_name}', fontsize=12)
     subfigures = figure.subfigures(nrows=1, ncols=3)
 
     to_summarize = [
@@ -302,17 +309,17 @@ def text_response_summary_page(df: pd.DataFrame, group_name: str) -> None:
             create_text_summary(text, axes[1])
 
 
-def summarize_group(df: pd.DataFrame, group_name: str, pdf: PdfPages) -> None:
-    quantitative_summary_page(df, group_name)
-    pdf.savefig()
+def summarize_group(context: AnalysisContext) -> None:
+    quantitative_summary_page(context)
+    context.pdf.savefig()
     plt.close()
 
-    text_response_summary_page(df, group_name)
-    pdf.savefig()
+    text_response_summary_page(context)
+    context.pdf.savefig()
     plt.close()
 
 
-def analyze_individuals(df: pd.DataFrame, group_name: str, pdf: PdfPages) -> None:
+def analyze_individuals(context: AnalysisContext) -> None:
     def get_self_marker(student: pd.Series,
                         dimension: str) -> list[tuple[int, str, str]]:
         value = student['self ' + dimension]
@@ -328,47 +335,46 @@ def analyze_individuals(df: pd.DataFrame, group_name: str, pdf: PdfPages) -> Non
         return [(sum(values) / len(values), 'c*', 'peers')]
 
     fig = plt.figure(constrained_layout=True)
-    fig.suptitle(f'Peer evaluations for {group_name}', fontsize=12)
+    fig.suptitle(f'Peer evaluations for {context.group_name}', fontsize=12)
 
-    subfigures = fig.subfigures(nrows=ceil(len(df.index) / 2), ncols=2)
+    subfigures = fig.subfigures(nrows=ceil(len(context.results.index) / 2), ncols=2)
 
-    students = (row for index, row in df.iterrows())
+    students = (row for index, row in context.results.iterrows())
     for student, subfigure in zip(students, subfigures.flatten(), strict=False):
         student_frame = pd.DataFrame({
             dimension: student['incoming ' + dimension]
-            for dimension in DIMENSIONS
+            for dimension in context.config.dimensions
         })
         markers = [
             get_self_marker(student, dimension) + get_outgoing_marker(student, dimension)
-            for dimension in DIMENSIONS
+            for dimension in context.config.dimensions
         ]
         subfigure.suptitle(student.name, fontsize=10)
-        individual_histogram(student_frame, subfigure, True, markers)
+        individual_histogram(student_frame, subfigure, context.config, True, markers)
 
-    pdf.savefig()
+    context.pdf.savefig()
     plt.close()
 
 
-def analyze_group(group_name: str,
-                  results: pd.DataFrame,
-                  pdf: PdfPages) -> None:
-    summarize_group(results, group_name, pdf)
-    analyze_individuals(results, group_name, pdf)
+def analyze_group(context: AnalysisContext) -> None:
+    summarize_group(context)
+    analyze_individuals(context)
 
 
 def analyze_data(results: pd.DataFrame,
                  students: roster.Roster,
                  group_label: str,
-                 filename: str) -> None:
+                 filename: str,
+                 config: EvalConfig) -> None:
 
     with PdfPages(filename) as pdf:
-        summarize_group(results, 'the whole class', pdf)
+        summarize_group(AnalysisContext(results, 'the whole class', pdf, config))
 
         groups = list(students.group_by(group_label))
         groups.sort()
         for group_name, group in tqdm(groups):
             group_results = results.loc[group[roster.Roster.Field.EMAIL.value]]
-            analyze_group(group_name, group_results, pdf)
+            analyze_group(AnalysisContext(group_results, group_name, pdf, config))
 
         d = pdf.infodict()
         d['Title'] = 'Peer Evaluation Results'
@@ -383,7 +389,8 @@ def analyze_data(results: pd.DataFrame,
 JSON: TypeAlias = Mapping[str, "JSON"] | Sequence["JSON"] | str | int | float | bool | None
 
 
-def create_initial_dataframe(student_ids: list[str]) -> pd.DataFrame:
+def create_initial_dataframe(student_ids: list[str],
+                             config: EvalConfig) -> pd.DataFrame:
     empty_strings = ['' for student in student_ids]
     zeros = [0 for student in student_ids]
 
@@ -395,19 +402,19 @@ def create_initial_dataframe(student_ids: list[str]) -> pd.DataFrame:
     }
     initial_data.update({
         f'overall{count}': zeros
-        for count in range(4)
+        for count in range(len(config.overall))
     })
     initial_data.update({
         f'self {dimension}': zeros
-        for dimension in DIMENSIONS
+        for dimension in config.dimensions
     })
     initial_data.update({
         f'incoming {dimension}': [[] for student in student_ids]
-        for dimension in DIMENSIONS
+        for dimension in config.dimensions
     })
     initial_data.update({
         f'outgoing {dimension}': [[] for student in student_ids]
-        for dimension in DIMENSIONS
+        for dimension in config.dimensions
     })
 
     table = pd.DataFrame(initial_data)
@@ -418,10 +425,11 @@ def create_initial_dataframe(student_ids: list[str]) -> pd.DataFrame:
 
 def collect_student_data(evaluation_dir: str,
                          student_ids: list[str],
-                         filename: str) -> pd.DataFrame:
+                         filename: str,
+                         config: EvalConfig) -> pd.DataFrame:
     start_dir = os.getcwd()
 
-    results = create_initial_dataframe(student_ids)
+    results = create_initial_dataframe(student_ids, config)
 
     for student in student_ids:
         json_path = os.path.join(evaluation_dir, student, filename)
@@ -453,11 +461,14 @@ def collect_student_data(evaluation_dir: str,
         direct_keys = ['wentwell', 'wentpoorly', 'othercomments']
         direct_values = [response[key] for key in direct_keys]
 
-        overall_keys = [f'overall{count}' for count in range(4)]
-        overall_values = [int(overall[str(count)]) for count in range(4)]
+        num_overall = len(config.overall)
+        overall_keys = [f'overall{count}' for count in range(num_overall)]
+        overall_values = [int(overall[str(count)]) for count in range(num_overall)]
 
-        self_keys = [f'self {dimension}' for dimension in DIMENSIONS]
-        self_values = [int(individual[student][dimension]) for dimension in DIMENSIONS]
+        self_keys = [f'self {dimension}'
+                     for dimension in config.dimensions]
+        self_values = [int(individual[student][dimension])
+                       for dimension in config.dimensions]
 
         combined_keys = direct_keys + overall_keys + self_keys
         combined_values = direct_values + overall_values + self_values
@@ -468,14 +479,14 @@ def collect_student_data(evaluation_dir: str,
         # about reviewing others below.
         individual.pop(student, None)
 
-        for dimension in DIMENSIONS:
+        for dimension in config.dimensions:
             key = f'outgoing {dimension}'
             value_list = [int(peer_eval[dimension])
                           for peer, peer_eval in individual.items()]
             results.at[student, key] = value_list
 
         for peer, peer_eval in individual.items():
-            for dimension in DIMENSIONS:
+            for dimension in config.dimensions:
                 key = f'incoming {dimension}'
                 value = int(peer_eval[dimension])
                 results.loc[peer, key].append(value)
@@ -532,20 +543,22 @@ def generate_text() -> str:
     return ' '.join(sentences)
 
 
-def generate_evaluation_json(student: str, usernames: list[str]) -> str:
+def generate_evaluation_json(student: str,
+                             usernames: list[str],
+                             config: EvalConfig) -> str:
     evaluation = {
         'student': student,
         'wentwell':      generate_text(),
         'wentpoorly':    generate_text(),
         'othercomments': generate_text(),
         'overall': {
-            str(statement): random.randrange(1, 6)
-            for statement in range(len(OVERALL))
+            str(statement): random.randrange(1, config.overall_ranks + 1)
+            for statement in range(len(config.overall))
         },
         'individual': {
             peer: {
-                dimension: random.randrange(1, 4)
-                for dimension in DIMENSIONS
+                dimension: random.randrange(1, config.dimension_ranks + 1)
+                for dimension in config.dimensions
             }
             for peer in usernames
         },
@@ -556,9 +569,11 @@ def generate_evaluation_json(student: str, usernames: list[str]) -> str:
 def generate_data(directory: str,
                   roster_csv: str,
                   group_label: str,
-                  filename: str) -> None:
+                  filename: str,
+                  config: EvalConfig) -> None:
     if not os.path.exists(roster_csv):
-        students = roster.from_nothing(20)
+        class_size = 20
+        students = roster.from_nothing(class_size)
     else:
         students = roster.from_roster_csv(roster_csv)
 
@@ -582,8 +597,9 @@ def generate_data(directory: str,
 
             student_eval_path = os.path.join(student_dir, filename)
             if not os.path.exists(student_eval_path):
+                eval_json = generate_evaluation_json(student, usernames, config)
                 with open(student_eval_path, 'w') as outfile:
-                    outfile.write(generate_evaluation_json(student, usernames))
+                    outfile.write(eval_json)
 
 
 #############################################################################
@@ -644,11 +660,14 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    config = EvalConfig(OVERALL, OVERALL_RANKS, DIMENSIONS, DIMENSION_RANKS)
+
     if args.generate_test_data:
         generate_data(args.evaluation_dir,
                       args.roster_csv,
                       args.group_label,
-                      args.filename)
+                      args.filename,
+                      config)
 
     validate_options(args)
 
@@ -658,9 +677,9 @@ def main() -> None:
 
     check_for_submissions(usernames, args.evaluation_dir)
 
-    evaluation_data = collect_student_data(args.evaluation_dir, usernames, args.filename)
+    evaluation_data = collect_student_data(args.evaluation_dir, usernames, args.filename, config)
 
-    analyze_data(evaluation_data, students, args.group_label, args.output)
+    analyze_data(evaluation_data, students, args.group_label, args.output, config)
 
 
 if __name__ == '__main__':
