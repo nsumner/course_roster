@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from json import dumps as dump_json
 from math import ceil
-from typing import Optional, Union
+from typing import Optional, Self, Union
 
 import pandas as pd  # type: ignore[import]
 
@@ -158,11 +158,20 @@ class GroupMatching:
     #   group_label: The label of the main group of the student
     #   assigned_label: The label of the group the student will collaborate with
     table: pd.DataFrame
-    group_label: str
+    group_label: Optional[str]
     assigned_label: str
 
-    def to_csv(self) -> str:
-        return self.table.to_csv()  # type: ignore[no-any-return]
+    def to_csv(self, path: str) -> None:
+        self.table.to_csv(path)
+
+    @classmethod
+    def from_csv(cls, path: str) -> Self:
+        table = pd.read_csv(path)
+        assigned_label = 'Assigned'
+
+        table.set_index(Roster.Field.ID.value, inplace=True, drop=True)
+
+        return cls(table, None, assigned_label)
 
 
 # Given a roster and column label for groups, assign each student another

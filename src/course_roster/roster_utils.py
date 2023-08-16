@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 
 import argparse
+import glob
+import os
+import shutil
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Optional, TypeAlias
 
+import pandas as pd  # type: ignore[import]
+
 from . import roster
-
-
-@dataclass
-class Action:
-    do: Callable[..., None]
-    save_roster: bool
-
 
 Grouper: TypeAlias = Callable[[roster.Roster, str, int], None]
 
 
-def _do_nothing(students: roster.Roster,
-                grouper: Grouper,
-                group_column: str,
-                group_size: int) -> None:
-    pass
+#############################################################################
+# Actions
+#############################################################################
+
+class Action(StrEnum):
+    SAVE                 = 'save'
+    ASSIGN_GROUPS        = 'assign-groups'
+    ASSIGN_ACROSS_GROUPS = 'assign-across-groups'
+    MERGE_FROM_ASSIGNED  = 'merge-from-assigned'
+    SHOW_JSON_GROUPS     = 'show-json-groups'
 
 
 def _assign_groups(students: roster.Roster,
@@ -32,21 +37,71 @@ def _assign_groups(students: roster.Roster,
 
 
 def _assign_across_groups(students: roster.Roster,
-                          grouper: Grouper,
                           group_column: str,
-                          group_size: int) -> None:
+                          output_path: str) -> None:
     matching = roster.assign_across_groups(students, group_column)
-    print(matching.to_csv())
+    matching.to_csv(output_path)
 
 
 def _show_json_groups(students: roster.Roster,
-                      grouper: Grouper,
-                      group_column: str,
-                      group_size: int) -> None:
+                      group_column: str) -> None:
     for group, group_line in roster.get_group_stubs(students, group_column):
         print(group)
         print(group_line)
         print()
+
+
+def _merge_from_assigned(students: roster.Roster,
+                         group_column: str,
+                         assigned: roster.GroupMatching,
+                         output_dir: str,
+                         matching: str) -> None:
+    def find_items(username: str) -> list[str]:
+        return list(glob.glob(os.path.join(output_dir, username, matching)))
+
+    def collect(students: pd.DataFrame) -> list[str]:
+        file_lists = students[roster.Roster.Field.EMAIL.value].map(find_items)
+        # Note, because DataFrame.explode turns empty lists into NaNs,
+        # we need to filter those out before flattening the column
+        non_empty = file_lists[file_lists.apply(len) > 0]
+        return non_empty.explode().tolist()  # type: ignore[no-any-return]
+
+    assignments = assigned.table.groupby(assigned.assigned_label)
+    collected = [(group, collect(students.table.loc[assigned.index]))
+                 for group, assigned in assignments]
+
+    base_pattern, file_type = os.path.splitext(matching)
+    match file_type.lower():
+        case '.pdf':
+            combiner = _combine_pdfs
+        case _:
+            combiner = _combine_text
+
+    for group, items in collected:
+        result_path = os.path.join(output_dir, f'{group}{file_type}')
+        combiner(items, result_path)
+
+
+# File merging helpers. Some of these may rely on outside utilities. If those
+# utilities are unavailale, they should throw a RunTimeError.
+
+def _combine_pdfs(sources: list[str], output_path: str) -> None:
+    if not sources:
+        return
+
+    pdftk_path = shutil.which('pdftk')
+    if not pdftk_path:
+        raise RuntimeError('Could not find `pdftk` to execute it. PDF merging not available')
+
+    command = [pdftk_path, *sources, 'cat', 'output', output_path]
+    subprocess.run(command, shell=False)  # noqa: S603
+
+
+def _combine_text(sources: list[str], output_path: str) -> None:
+    with open(output_path, 'w') as outfile:
+        for source in sources:
+            with open(source) as infile:
+                outfile.writelines(infile.readlines())
 
 
 #############################################################################
@@ -116,21 +171,48 @@ def _create_coursys_grouper(possible_path: str) -> Grouper:
 # Roster sources
 #############################################################################
 
-def _read_roster_csv(possible_path: str) -> roster.Roster:
-    return roster.from_roster_csv(possible_path)
+@dataclass
+class RosterInfo:
+    students: roster.Roster
+    modifiable_source: Optional[str]
 
 
-def _read_sims_csv(possible_path: str) -> roster.Roster:
-    return roster.from_sims_csv(possible_path)
+def _read_roster_csv(path: str) -> RosterInfo:
+    return RosterInfo(roster.from_roster_csv(path), path)
 
 
-def _random_roster(size_as_str: str) -> roster.Roster:
-    return roster.from_nothing(int(size_as_str))
+def _read_sims_csv(path: str) -> RosterInfo:
+    return RosterInfo(roster.from_sims_csv(path), None)
+
+
+def _random_roster(size_as_str: str) -> RosterInfo:
+    return RosterInfo(roster.from_nothing(int(size_as_str)), None)
 
 
 #############################################################################
-# Main entry point
+# Main entry point and helpers
 #############################################################################
+
+
+def _get_roster_output(explicit: Optional[str], roster_info: RosterInfo) -> str:
+    if explicit:
+        return explicit
+    if roster_info.modifiable_source:
+        return roster_info.modifiable_source
+    return 'roster.csv'
+
+
+def _get_matching_output(explicit: Optional[str]) -> str:
+    if explicit:
+        return explicit
+    return 'assigned.csv'
+
+
+def _get_output_dir(explicit: Optional[str]) -> str:
+    if explicit:
+        return explicit
+    return './'
+
 
 # Any workflow on a roster must have:
 #  * a source of roster data
@@ -139,18 +221,12 @@ def _random_roster(size_as_str: str) -> roster.Roster:
 #
 # The source and the output may be implicitly determined, but they are still
 # required. If the underlying roster was modified, then it will be saved
-# to a roster file after the given operation. If a different target
+# to a roster file after the given operation.
 
 def main() -> None:
-    core_actions = {
-        'save':                 Action(_do_nothing,           True),
-        'assign-groups':        Action(_assign_groups,        True),
-        'assign-across-groups': Action(_assign_across_groups, False),
-        'show-json-groups':     Action(_show_json_groups,     False),
-    }
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('action', choices=core_actions.keys())
+    parser.add_argument('action', choices=[a.value for a in Action])
 
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument('--roster',
@@ -186,20 +262,52 @@ def main() -> None:
                         type=int,
                         default=8)
 
+    parser.add_argument('--output',
+                        help='',
+                        type=str)
+
+    parser.add_argument('--assigned',
+                        help='',
+                        type=str,
+                        default='assigned.csv')
+
+    parser.add_argument('--matching',
+                        help='',
+                        type=str,
+                        default='*.pdf')
+
     args = parser.parse_args()
 
-    students = args.roster
+    roster_info = args.roster
 
     grouper = args.grouper if args.grouper else _create_random_groups
-
     group_column = args.group_column
     group_size = args.group_size
 
-    action = core_actions[args.action]
-    action.do(students, grouper, group_column, group_size)
+    output = args.output
 
-    if action.save_roster:
-        roster.to_roster_csv(students, 'roster.csv')
+    match args.action:
+        case Action.SAVE.value:
+            output = _get_roster_output(output, roster_info)
+            roster.to_roster_csv(roster_info.students, output)
+
+        case Action.ASSIGN_GROUPS.value:
+            _assign_groups(roster_info.students, grouper, group_column, group_size)
+            output = _get_roster_output(output, roster_info)
+            roster.to_roster_csv(roster_info.students, output)
+
+        case Action.ASSIGN_ACROSS_GROUPS.value:
+            output = _get_matching_output(output)
+            _assign_across_groups(roster_info.students, group_column, output)
+
+        case Action.MERGE_FROM_ASSIGNED.value:
+            output = _get_output_dir(output)
+            assigned = roster.GroupMatching.from_csv(args.assigned)
+            matching = args.matching
+            _merge_from_assigned(roster_info.students, group_column, assigned, output, matching)
+
+        case Action.SHOW_JSON_GROUPS.value:
+            _show_json_groups(roster_info.students, group_column)
 
 
 if __name__ == '__main__':
