@@ -12,7 +12,7 @@ libraries and scripts that help with:
 
 ## Example use cases
 
-### Creating teams from a [SIMS](https://www.go.sfu.ca) roster CSV
+### Creating teams from a [SIMS](https://go.sfu.ca) roster CSV
 
 ... can be done with:
 
