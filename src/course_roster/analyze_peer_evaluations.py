@@ -332,7 +332,7 @@ def analyze_individuals(context: AnalysisContext) -> None:
         values = [x for x in student['outgoing ' + dimension] if x != 0]
         if len(values) == 0:
             return []
-        return [(sum(values) / len(values), 'c*', 'peers')]
+        return [(sum(values) / len(values), 'c*', 'outward')]
 
     fig = plt.figure(constrained_layout=True)
     fig.suptitle(f'Peer evaluations for {context.group_name}', fontsize=12)
