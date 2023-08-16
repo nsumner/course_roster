@@ -65,46 +65,47 @@ profile = "black"
 
 [tool.ruff]
 select = [
-    "ANN", # annotations
-    "B", # bugbear
-    "C4", # comprehensions
-    "COM", # trailing comma
-    "DJ", # Django
-    "DTZ", # naive datetime
-    "E", # style errors
-    "EXE", # shebang
-    "F", # flakes
-    "FLY", # string formatting
-    "G", # logging format
-    "I", # import sorting
-    "INT", # gettext
-    "ISC", # string concatenation
-    "N", # naming
+    "ANN",  # annotations
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "COM",  # trailing comma
+    "DJ",   # Django
+    "DTZ",  # naive datetime
+    "E",    # style errors
+    "EXE",  # shebang
+    "F",    # flakes
+    "FLY",  # string formatting
+    "G",    # logging format
+    "I",    # import sorting
+    "INT",  # gettext
+    "ISC",  # string concatenation
+    "N",    # naming
     "PERF", # performance
-    "PGH", # pygrep-hooks
-    "PIE", # miscellaneous
-    "PL", # pylint
-    "PYI", # typing stubs
-    "Q", # quotes
-    "RSE", # raise
-    "RUF", # Ruff
-    "S", # security
-    "SIM", # simplify
-    "T10", # debugger
-    "UP", # upgrade
-    "W", # style warnings
-    "YTT", # sys.version
+    "PGH",  # pygrep-hooks
+    "PIE",  # miscellaneous
+    "PL",   # pylint
+    "PYI",  # typing stubs
+    "Q",    # quotes
+    "RSE",  # raise
+    "RUF",  # Ruff
+    "S",    # security
+    "SIM",  # simplify
+    "T10",  # debugger
+    "UP",   # upgrade
+    "W",    # style warnings
+    "YTT",  # sys.version
 ]
 ignore = [
     "ANN101",  # Missing type annotation for `self` in method
-    "ANN003", # Missing type annotation for `**kwargs`
-    "DTZ005", # The use of `datetime.datetime.now()` without `tz` argument is not allowed
-    "PGH003", # Use specific error codes when ignoring type issues TODO: Reconsider?
+    "ANN102",  # Missing type annotation for `cls` in classmethod
+    "ANN003",  # Missing type annotation for `**kwargs`
+    "DTZ005",  # The use of `datetime.datetime.now()` without `tz` argument is not allowed
+    "PGH003",  # Use specific error codes when ignoring type issues TODO: Reconsider?
     "PLR0913", # Function or method takes too many arguments TODO: Reconsider?
-    "Q000", # Single quotes found but double quotes preferred
-    "S101", # Use of `assert` detected
-    "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
-    "UP007" # Use X | Y for type annotations
+    "Q000",    # Single quotes found but double quotes preferred
+    "S101",    # Use of `assert` detected
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "UP007"    # Use X | Y for type annotations
 ]
 line-length = 100
 target-version = "py310"
