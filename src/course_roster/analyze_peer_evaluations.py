@@ -6,6 +6,7 @@ import json
 import os
 import random
 import sys
+import textwrap
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import ceil
@@ -52,10 +53,10 @@ mpl.rcParams.update({
 # TODO: Separate the specifics of the peer evaluation into separate configuration
 
 OVERALL = [
-    'Work was divided \nfairly and reasonably.',
-    'The team developed a \ndesign based on the known\n requirements of the project.',
-    'The team developed \ngoals based on the known\n requirements of the project.',
-    'The team achieved the goals \nset out for this iteration.',
+    'Work was divided fairly and reasonably.',
+    'The team developed a design based on the known requirements of the project.',
+    'The team developed goals based on the known requirements of the project.',
+    'The team achieved the goals set out for this iteration.',
 ]
 OVERALL_RANKS = 5
 
@@ -69,6 +70,16 @@ DIMENSIONS = [
 DIMENSION_RANKS = 3
 
 
+WRITTEN = [
+    ("wentwell",
+     "What went well?"),
+    ("wentpoorly",
+     "What went poorly?"),
+    ("othercomments",
+     "Are there any other issues you have encountered or comments that you have so far?"),
+]
+
+
 @dataclass
 class EvalConfig:
     overall: list[str]
@@ -76,6 +87,8 @@ class EvalConfig:
 
     dimensions: list[str]
     dimension_ranks: int
+
+    written: list[tuple[str, str]]
 
 
 @dataclass
@@ -90,6 +103,36 @@ class AnalysisContext:
 # Analysis and visualization
 #############################################################################
 
+
+# LaTeX Helpers
+
+# Because we are using LaTeX to render the figures, word wrapping gets ignored
+# by matplotlib. This means that we need to perform wrapping via LaTeX ourselves.
+# These helpers provide either a direct approach for labels or a drawable Text
+# object for convenience.
+
+def _wrapped_latex(text: str, width: str, centered: bool = False) -> str:
+    centering = '\\centering' if centered else ''
+    return f'\\parbox{{{width}}}{{{centering} {text}}}'
+
+
+# `TexWrappedText` provides a class that can do this for a
+# *provided* paragraph width. The downside is that this width must be manually
+# chosen instead of inferred.
+class TexWrappedText(mpltext.Text):  # type: ignore[misc]
+    def __init__(self: mpltext.Text,  # type: ignore[no-untyped-def]
+                 x: int = 0,
+                 y: int = 0,
+                 text: str = '',
+                 width: str = '2cm',
+                 **kwargs) -> None:
+        mpltext.Text.__init__(self, x=x, y=y, text=text, wrap=True, **kwargs)
+        self.width = width
+
+    def _get_wrapped_text(self) -> str:
+        return _wrapped_latex(self.get_text(), self.width)
+
+
 # Histogramming
 
 def generate_rank_colors(max_rank: int) -> list[tuple[float, float, float]]:
@@ -97,16 +140,16 @@ def generate_rank_colors(max_rank: int) -> list[tuple[float, float, float]]:
     red = 1.0
     blue = 1.0
     return [
-        (red * (1 - (i - 1.0) / (mid - 1.0)), 0, 0) for i in range(1, mid)
+        (red * (1 - (i - 1.0) / (mid - 1.0)), 0.0, 0.0) for i in range(1, mid)
     ] + [
-        (0, 0, blue * (i - mid) / (max_rank - mid)) for i in range(mid, max_rank + 1)
+        (0.0, 0.0, blue * (i - mid) / (max_rank - mid)) for i in range(mid, max_rank + 1)
     ]
 
 
 # A `BinNote` adds an annotation to a particular bin within a histogram.
 # For example, (2, 'rx', 'Self') adds a red X with the label 'Self' on the
 # x axis to the bin for the value 2.
-BinNote: TypeAlias = tuple[int, str, str]
+BinNote: TypeAlias = tuple[float, str, str]
 
 
 def construct_histogram(data: pd.DataFrame,
@@ -170,16 +213,19 @@ def construct_histogram(data: pd.DataFrame,
 def overall_histogram(df: pd.DataFrame,
                       container: mpl.figure.Figure,
                       config: EvalConfig) -> None:
+    chars_per_title_line = 120
     min_rank = 1
     max_rank = config.overall_ranks
     axes = container.subplots(1, len(config.overall))
 
     for index, (axis, statement) in enumerate(zip(axes, config.overall, strict=True)):
         label = f'overall{index}'
+        title_width = chars_per_title_line // len(config.overall)
+        title = '\n'.join(textwrap.wrap(statement, width=title_width))
 
         # Filter out invalid data
         view = df[df[label].between(min_rank, max_rank)]
-        construct_histogram(view, label, container, axis, max_rank, statement)
+        construct_histogram(view, label, container, axis, max_rank, title)
 
 
 def individual_histogram(df: pd.DataFrame,
@@ -210,6 +256,8 @@ def individual_histogram(df: pd.DataFrame,
 # Wordclouds
 
 def create_wordcloud(text: str, axis: mpl.axes.Axes) -> None:
+    assert _HAS_WORDCLOUD
+
     wordcloud = WordCloud(max_words=30,
                           background_color="white",
                           width=400,
@@ -219,26 +267,9 @@ def create_wordcloud(text: str, axis: mpl.axes.Axes) -> None:
 
 # Text summaries
 
-# Because we are using LaTeX to render the figures, word wrapping gets ignored
-# by matplotlib. This means that we need to perform wrapping via LaTeX
-# ourselves. `TexWrappedText` provides a class that can do this for a
-# *provided* paragraph width. The downside is that this width must be manually
-# chosen instead of inferred.
-class TexWrappedText(mpltext.Text):  # type: ignore[misc]
-    def __init__(self: mpltext.Text,  # type: ignore[no-untyped-def]
-                 x: int = 0,
-                 y: int = 0,
-                 text: str = '',
-                 width: str = '2cm',
-                 **kwargs) -> None:
-        mpltext.Text.__init__(self, x=x, y=y, text=text, wrap=True, **kwargs)
-        self.width = width
+def create_text_summary(text: str, axis: mpl.axes.Axes, column_width: str) -> None:
+    assert _HAS_SUMY
 
-    def _get_wrapped_text(self) -> str:
-        return f'\\parbox{{{self.width}}}{{{self.get_text()}}}'
-
-
-def create_text_summary(text: str, axis: mpl.axes.Axes) -> None:
     sentence_count = 5
     parser = SumyParser.from_string(text, SumyTokenizer('english'))
     summarizer = SumySummarizer()
@@ -246,7 +277,7 @@ def create_text_summary(text: str, axis: mpl.axes.Axes) -> None:
     summary = ' '.join([str(sentence) for sentence in summary_sentences])
 
     axis.set(xlim=(0, 1), ylim=(0, 1))
-    note = TexWrappedText(0, 1, summary, fontsize=6, width='4cm',
+    note = TexWrappedText(0, 1, summary, fontsize=6, width=column_width,
                           ha='left', va='top')
     axis.add_artist(note)
 
@@ -278,35 +309,38 @@ def quantitative_summary_page(context: AnalysisContext) -> None:
     individual_histogram(incoming_frame, of_others_fig, context.config)
 
 
+def _has_words(text: str) -> bool:
+    return any(c.isalpha() for c in text)
+
+
 def text_response_summary_page(context: AnalysisContext) -> None:
-    wentwell = ' '.join(context.results['wentwell'].tolist()).strip()
-    wentpoorly = ' '.join(context.results['wentpoorly'].tolist()).strip()
-    other_comments = ' '.join(context.results['othercomments'].tolist()).strip()
+    texts = [(prompt, ' '.join(context.results[key].tolist()).strip())
+             for key, prompt in context.config.written]
 
     figure = plt.figure()
     figure.suptitle(f'Summaries for {context.group_name}', fontsize=12)
-    subfigures = figure.subfigures(nrows=1, ncols=3)
+    subfigures = figure.subfigures(nrows=1, ncols=len(texts))
 
-    to_summarize = [
-        (wentwell, 'What went well?'),
-        (wentpoorly, 'What went poorly?'),
-        (other_comments, 'Other comments?'),
-    ]
+    for (title, text), subfigure in zip(texts, subfigures, strict=True):
+        chars_per_title_line = 80
+        title_width = chars_per_title_line // len(texts)
+        wrapped_title = '\n'.join(textwrap.wrap(title, width=title_width))
 
-    for (text, title), subfigure in zip(to_summarize, subfigures, strict=True):
-        subfigure.suptitle(title, fontsize=10)
+        subfigure.suptitle(wrapped_title, fontsize=10)
         axes = subfigure.subplots(2, 1)
 
         for ax in axes:
             ax.set_axis_off()
 
-        if not text:
+        if not _has_words(text):
             continue
 
         if _HAS_WORDCLOUD:
             create_wordcloud(text, axes[0])
         if _HAS_SUMY:
-            create_text_summary(text, axes[1])
+            available_cm_per_page = 12
+            text_width = round(available_cm_per_page / len(texts), 2)
+            create_text_summary(text, axes[1], f'{text_width}cm')
 
 
 def summarize_group(context: AnalysisContext) -> None:
@@ -321,14 +355,14 @@ def summarize_group(context: AnalysisContext) -> None:
 
 def analyze_individuals(context: AnalysisContext) -> None:
     def get_self_marker(student: pd.Series,
-                        dimension: str) -> list[tuple[int, str, str]]:
-        value = student['self ' + dimension]
+                        dimension: str) -> list[tuple[float, str, str]]:
+        value = float(student['self ' + dimension])
         if value == 0:
             return []
         return [(value, 'yx', 'self')]
 
     def get_outgoing_marker(student: pd.Series,
-                            dimension: str) -> list[tuple[int, str, str]]:
+                            dimension: str) -> list[tuple[float, str, str]]:
         values = [x for x in student['outgoing ' + dimension] if x != 0]
         if len(values) == 0:
             return []
@@ -396,9 +430,6 @@ def create_initial_dataframe(student_ids: list[str],
 
     initial_data: dict[str, JSON] = {
         'username': student_ids,
-        'wentwell': empty_strings,
-        'wentpoorly': empty_strings,
-        'othercomments': empty_strings,
     }
     initial_data.update({
         f'overall{count}': zeros
@@ -415,6 +446,10 @@ def create_initial_dataframe(student_ids: list[str],
     initial_data.update({
         f'outgoing {dimension}': [[] for student in student_ids]
         for dimension in config.dimensions
+    })
+    initial_data.update({
+        label: empty_strings
+        for label, prompt in config.written
     })
 
     table = pd.DataFrame(initial_data)
@@ -441,11 +476,23 @@ def collect_student_data(evaluation_dir: str,
         with open(json_path) as infile:
             response = json.load(infile)
 
-        if student != response['student']:
-            print(f'Student and username do not match: {student}, {response["student"]}')
+        match response:
+            case {
+                    'student':    found_student,
+                    'overall':    overall,
+                    'individual': individual,
+                    'written':    written,
+            }:
+                pass
+            case _:
+                print("Invalid json content for evaluation.")
+                continue
 
-        individual = response['individual']
-        overall = response['overall']
+        if student != found_student:
+            print(f'Student and username do not match: {student}, {found_student}')
+
+        # individual = response['individual']
+        # overall = response['overall']
 
         # TODO: Ensure that student's response covers exactly those people
         #  in the student's group, no more and no less.
@@ -458,8 +505,8 @@ def collect_student_data(evaluation_dir: str,
         # value types and set them for the row together before setting list
         # contents one at a time.
 
-        direct_keys = ['wentwell', 'wentpoorly', 'othercomments']
-        direct_values = [response[key] for key in direct_keys]
+        written_keys = [label for label, prompt in config.written]
+        written_values = [written[key] for key in written_keys]
 
         num_overall = len(config.overall)
         overall_keys = [f'overall{count}' for count in range(num_overall)]
@@ -470,8 +517,8 @@ def collect_student_data(evaluation_dir: str,
         self_values = [int(individual[student][dimension])
                        for dimension in config.dimensions]
 
-        combined_keys = direct_keys + overall_keys + self_keys
-        combined_values = direct_values + overall_values + self_values
+        combined_keys = written_keys + overall_keys + self_keys
+        combined_values = written_values + overall_values + self_values
         results.loc[student, combined_keys] = combined_values
 
         # All other evaluations are of peers, so we can remove the self eval.
@@ -548,9 +595,6 @@ def generate_evaluation_json(student: str,
                              config: EvalConfig) -> str:
     evaluation = {
         'student': student,
-        'wentwell':      generate_text(),
-        'wentpoorly':    generate_text(),
-        'othercomments': generate_text(),
         'overall': {
             str(statement): random.randrange(1, config.overall_ranks + 1)
             for statement in range(len(config.overall))
@@ -561,6 +605,10 @@ def generate_evaluation_json(student: str,
                 for dimension in config.dimensions
             }
             for peer in usernames
+        },
+        'written': {
+            label: generate_text()
+            for label, question in config.written
         },
     }
     return json.dumps(evaluation)
@@ -660,7 +708,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    config = EvalConfig(OVERALL, OVERALL_RANKS, DIMENSIONS, DIMENSION_RANKS)
+    config = EvalConfig(OVERALL, OVERALL_RANKS, DIMENSIONS, DIMENSION_RANKS, WRITTEN)
 
     if args.generate_test_data:
         generate_data(args.evaluation_dir,

@@ -90,12 +90,8 @@ technical skill, productivity, team work, and communication on the scale<br />
 
         <table>
           <thead>
-            <tr>
+            <tr id="individual-header">
               <th>Student</th>
-              <th class="spacercol"/> <th colspan="3">Technical</th>
-              <th class="spacercol"/> <th colspan="3">Productivity</th>
-              <th class="spacercol"/> <th colspan="3">Team Work</th>
-              <th class="spacercol"/> <th colspan="3">Skill</th>
             </tr>
           </thead>
           <tbody id="individual-body"> </tbody>
@@ -103,17 +99,8 @@ technical skill, productivity, team work, and communication on the scale<br />
 
       </fieldset></p>
 
-      <p><fieldset name="freeform">
-        <legend>Freeform comments</legend>
-
-        <label for="wentwell">What went well?</label><br/>
-        <textarea name="wentwell" rows="15" cols="100"></textarea><br /><br />
-
-        <label for="wentpoorly">What went poorly?</label><br/>
-        <textarea name="wentpoorly" rows="15" cols="100"></textarea><br /><br />
-
-        <label for="othercomments">Are there any other issues you have encountered or comments that you have so far?</label><br/>
-        <textarea name="othercomments" rows="15" cols="100"></textarea>
+      <p><fieldset name="written" id="written">
+        <legend>Written Comments</legend>
       </fieldset></p>
 
       <div style="text-align: center;">
@@ -175,7 +162,7 @@ function insert_rating_table_row(table_body, row_text, sections, max_rating, rad
   label_cell.appendChild(document.createTextNode(row_text));
   
   for (const section of sections) {
-    const spacer_cell = row.insertCell(-1);
+    row.insertCell(-1);
 
     for (let rating = 1; rating <= max_rating; ++rating) {
       const rating_cell = row.insertCell(-1);
@@ -187,25 +174,55 @@ function insert_rating_table_row(table_body, row_text, sections, max_rating, rad
 }
 
 
-function create_overall_table(table_body, process_statements) {
-  const MAX_RATING = 5;
+function create_overall_table(table_body, process_statements, max_rating) {
   const SECTIONS = ["overall"];
 
   for (const [statement_id, statement] of process_statements.entries()) {
     const namer = (section) => section + statement_id;
-    insert_rating_table_row(table_body, statement, SECTIONS, MAX_RATING, namer);
+    insert_rating_table_row(table_body, statement, SECTIONS, max_rating, namer);
   }
 }
 
 
-function create_individual_table(table_body, dimensions, group_info) {
-  const MAX_RATING = 3;
-
+function create_individual_table(table_body, dimensions, group_info, max_rating) {
   for (const student of group_info) {
     const name = student["name"];
     const email = student["email"];
     const namer = (dimension) => dimension + "-" + email;
-    insert_rating_table_row(table_body, name, dimensions, MAX_RATING, namer);
+    insert_rating_table_row(table_body, name, dimensions, max_rating, namer);
+  }
+}
+
+
+function create_individual_headers(header_row, dimensions, max_rating) {
+  for (const dimension of dimensions) {
+    const spacer = document.createElement("th");
+    spacer.classList.add('spacercol');
+    header_row.appendChild(spacer);
+
+    const likert_span = document.createElement("th");
+    likert_span.setAttribute("colspan", max_rating);
+    likert_span.appendChild(document.createTextNode(dimension));
+    header_row.appendChild(likert_span);
+  }
+}
+
+
+function create_written_responses(section, prompts) {
+  for (const [name, prompt] of prompts) {
+    const textarea = document.createElement("textarea");
+    textarea.setAttribute("name", name);
+    textarea.setAttribute("rows", 15);
+    textarea.setAttribute("cols", 100);
+
+    const label = document.createElement("label");
+    label.appendChild(document.createTextNode(prompt));
+    label.appendChild(document.createElement("br"));
+    label.appendChild(textarea);
+    label.appendChild(document.createElement("br"));
+    label.appendChild(document.createElement("br"));
+
+    section.append(label);
   }
 }
 
@@ -230,7 +247,7 @@ function extract_form_results() {
   result_map.set('student', formData.get("username"));
 
   const overall_results = new Map();
-  for (const [statement_id, statement] of process_statements.entries()) {
+  for (const [statement_id, ] of process_statements.entries()) {
     overall_results.set(statement_id.toString(), formData.get("overall" + statement_id));
   }
   result_map.set("overall", Object.fromEntries(overall_results));
@@ -248,9 +265,11 @@ function extract_form_results() {
   }
   result_map.set("individual", Object.fromEntries(individual_results));
 
-  result_map.set("wentwell", formData.get("wentwell"))
-  result_map.set("wentpoorly", formData.get("wentpoorly"))
-  result_map.set("othercomments", formData.get("othercomments"))
+  const written_results = new Map();
+  for (const [name, ] of written) {
+    written_results.set(name, formData.get(name));
+  }
+  result_map.set("written", Object.fromEntries(written_results));
 
   return JSON.stringify(Object.fromEntries(result_map));
 }
@@ -274,8 +293,9 @@ const process_statements = [
   "The team developed goals based on the known requirements of the project.",
   "The team achieved the goals set out for this iteration."
 ];
+const overall_max_ranking = 5;
 const overall_body = document.getElementById("overall-table");
-create_overall_table(overall_body, process_statements);
+create_overall_table(overall_body, process_statements, overall_max_ranking);
 
 const individual_dimensions = [
   "technical",
@@ -283,12 +303,23 @@ const individual_dimensions = [
   "team work",
   "skill"
 ];
+const individual_max_ranking = 3;
+const individual_header = document.getElementById("individual-header");
+create_individual_headers(individual_header, individual_dimensions, individual_max_ranking);
 const individual_body = document.getElementById("individual-body");
-create_individual_table(individual_body, individual_dimensions, group_info);
+create_individual_table(individual_body, individual_dimensions, group_info, individual_max_ranking);
+
+const written = [
+  ["wentwell", "What went well?"],
+  ["wentpoorly", "What went poorly?"],
+  ["othercomments", "Are there any other issues you have encountered or comments that you have so far?"]
+];
+const written_section = document.getElementById("written");
+create_written_responses(written_section, written);
 
 document.getElementById('evaluation-form').addEventListener("submit", handle_submit);
 
 </script>
 </body>
 
-<html>
+</html>
