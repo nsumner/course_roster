@@ -33,12 +33,16 @@ summaries = [
   "wordcloud>=1.8",
   "sumy>=0.11.0",
 ]
+gitrepos = [
+  "pydriller",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/nsumner/course_roster"
 "Bug Tracker" = "https://github.com/nsumner/course_roster/issues"
 
 [project.scripts]
+analyze-git-activity = "course_roster.analyze_git_activity:main"
 analyze-peer-evaluations = "course_roster.analyze_peer_evaluations:main"
 roster-utils = "course_roster.roster_utils:main"
 
