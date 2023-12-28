@@ -5,6 +5,7 @@ import glob
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -27,6 +28,8 @@ class Action(StrEnum):
     ASSIGN_ACROSS_GROUPS = 'assign-across-groups'
     MERGE_FROM_ASSIGNED  = 'merge-from-assigned'
     SHOW_JSON_GROUPS     = 'show-json-groups'
+    SHOW_READABLE_GROUPS = 'show-readable-groups'
+    SHOW_EMAILS_FOR_GROUPS  = 'show-emails-for-groups'
 
 
 def _assign_groups(students: roster.Roster,
@@ -42,6 +45,12 @@ def _assign_across_groups(students: roster.Roster,
     matching = roster.assign_across_groups(students, group_column)
     matching.to_csv(output_path)
 
+    merged = students.table.merge(matching.table, on=roster.Roster.Field.ID.value)
+
+    for group, members in merged.groupby(matching.assigned_label):
+        emails = members[roster.Roster.Field.EMAIL.value].tolist()
+        print(f'{group}: {", ".join(emails)}')
+
 
 def _show_json_groups(students: roster.Roster,
                       group_column: str) -> None:
@@ -49,6 +58,23 @@ def _show_json_groups(students: roster.Roster,
         print(group)
         print(group_line)
         print()
+
+
+def _show_readable_groups(students: roster.Roster,
+                      group_column: str) -> None:
+    for group, members in students.group_by(group_column):
+        print(group, '\n#########')
+        names = '\n'.join((members[roster.Roster.Field.PREFERRED_NAME.value]
+                           + ' '
+                           + members[roster.Roster.Field.LAST_NAME.value]).tolist())
+        print(names)
+        print()
+
+def _show_emails_for_groups(students: roster.Roster,
+                      group_column: str) -> None:
+    for count, (group, members) in enumerate(students.group_by(group_column)):
+        ids = ','.join(members[roster.Roster.Field.EMAIL.value].to_list())
+        print(f'Group {count} - {group}: {ids}')
 
 
 def _merge_from_assigned(students: roster.Roster,
@@ -94,7 +120,7 @@ def _combine_pdfs(sources: list[str], output_path: str) -> None:
         raise RuntimeError('Could not find `pdftk` to execute it. PDF merging not available')
 
     command = [pdftk_path, *sources, 'cat', 'output', output_path]
-    subprocess.run(command, shell=False)  # noqa: S603
+    subprocess.run(command, shell=False, check=True)  # noqa: S603
 
 
 def _combine_text(sources: list[str], output_path: str) -> None:
@@ -276,7 +302,12 @@ def main() -> None:
                         type=str,
                         default='*.pdf')
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except FileNotFoundError as file_not_found:
+        print(f'ERROR: Unable to open and read {file_not_found.filename}.\n',
+              file=sys.stderr)
+        return
 
     roster_info = args.roster
 
@@ -308,6 +339,12 @@ def main() -> None:
 
         case Action.SHOW_JSON_GROUPS.value:
             _show_json_groups(roster_info.students, group_column)
+
+        case Action.SHOW_READABLE_GROUPS.value:
+            _show_readable_groups(roster_info.students, group_column)
+
+        case Action.SHOW_EMAILS_FOR_GROUPS.value:
+            _show_emails_for_groups(roster_info.students, group_column)
 
 
 if __name__ == '__main__':
