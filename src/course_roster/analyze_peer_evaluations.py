@@ -65,7 +65,7 @@ DIMENSIONS = [
     'technical',
     'productivity',
     'team work',
-    'skill',
+    'communication',
 ]
 DIMENSION_RANKS = 3
 
@@ -313,6 +313,11 @@ def _has_words(text: str) -> bool:
     return any(c.isalpha() for c in text)
 
 
+LATEX_SANITIZING_TRANSLATION = str.maketrans({
+  '#': '\\#',
+})
+
+
 def text_response_summary_page(context: AnalysisContext) -> None:
     texts = [(prompt, ' '.join(context.results[key].tolist()).strip())
              for key, prompt in context.config.written]
@@ -326,21 +331,23 @@ def text_response_summary_page(context: AnalysisContext) -> None:
         title_width = chars_per_title_line // len(texts)
         wrapped_title = '\n'.join(textwrap.wrap(title, width=title_width))
 
+        cleaned = text.translate(LATEX_SANITIZING_TRANSLATION)
+
         subfigure.suptitle(wrapped_title, fontsize=10)
         axes = subfigure.subplots(2, 1)
 
         for ax in axes:
             ax.set_axis_off()
 
-        if not _has_words(text):
+        if not _has_words(cleaned):
             continue
 
         if _HAS_WORDCLOUD:
-            create_wordcloud(text, axes[0])
+            create_wordcloud(cleaned, axes[0])
         if _HAS_SUMY:
             available_cm_per_page = 12
             text_width = round(available_cm_per_page / len(texts), 2)
-            create_text_summary(text, axes[1], f'{text_width}cm')
+            create_text_summary(cleaned, axes[1], f'{text_width}cm')
 
 
 def summarize_group(context: AnalysisContext) -> None:
