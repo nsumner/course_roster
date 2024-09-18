@@ -23,14 +23,14 @@ Grouper: TypeAlias = Callable[[roster.Roster, str, int], None]
 # General Presentation Helpers
 #############################################################################
 
-def strip_diacritics(string: str) -> str:
+def _strip_diacritics(string: str) -> str:
     normalized = unicodedata.normalize('NFKD', string)
     return u"".join(c for c in normalized if not unicodedata.combining(c))
 
 
 T = TypeVar('T')
-def sorted_by_group(groups: Sequence[tuple[str, T]]) -> Generator[tuple[str,T], None, None]:
-    wrapped = [(strip_diacritics(name), (name, group))
+def _sorted_by_group(groups: Sequence[tuple[str, T]]) -> Generator[tuple[str,T], None, None]:
+    wrapped = [(_strip_diacritics(name), (name, group))
                for name, group in groups]
     wrapped.sort()
     return (grouped for stripped, grouped in wrapped)
@@ -65,7 +65,8 @@ def _assign_across_groups(students: roster.Roster,
 
     merged = students.table.merge(matching.table, on=roster.Roster.Field.ID.value)
 
-    for group, members in sorted_by_group(merged.groupby(matching.assigned_label)):
+    groups = _sorted_by_group(merged.groupby(matching.assigned_label))
+    for group, members in groups:
         emails = members[roster.Roster.Field.EMAIL.value].tolist()
         print(f'{group}: {", ".join(emails)}')
 
@@ -73,8 +74,7 @@ def _assign_across_groups(students: roster.Roster,
 def _show_json_groups(students: roster.Roster,
                       group_column: str) -> None:
     stubs = roster.get_group_stubs(students, group_column)
-    stubs.sort()
-    for group, group_line in sorted_by_group(stubs):
+    for group, group_line in _sorted_by_group(stubs):
         print(group)
         print(group_line)
         print()
@@ -82,7 +82,8 @@ def _show_json_groups(students: roster.Roster,
 
 def _show_readable_groups(students: roster.Roster,
                       group_column: str) -> None:
-    for group, members in sorted_by_group(students.group_by(group_column)):
+    groups = _sorted_by_group(students.group_by(group_column))
+    for group, members in groups:
         print(group, '\n#########')
         names = '\n'.join((members[roster.Roster.Field.PREFERRED_NAME.value]
                            + ' '
@@ -92,7 +93,8 @@ def _show_readable_groups(students: roster.Roster,
 
 def _show_emails_for_groups(students: roster.Roster,
                       group_column: str) -> None:
-    for count, (group, members) in enumerate(sorted_by_group(students.group_by(group_column))):
+    groups = _sorted_by_group(students.group_by(group_column))
+    for count, (group, members) in enumerate(groups):
         ids = ','.join(members[roster.Roster.Field.EMAIL.value].to_list())
         print(f'Group {count} - {group}: {ids}')
 
