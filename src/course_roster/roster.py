@@ -253,6 +253,4 @@ def get_group_stubs(roster: Roster,
     def get_stub(group: pd.Series) -> str:
         return dump_json(group.apply(get_student_stub, axis=1).to_list())
 
-    stubs = [(group_id, get_stub(group)) for group_id, group in groups]
-    stubs.sort()
-    return stubs
+    return [(group_id, get_stub(group)) for group_id, group in groups]
