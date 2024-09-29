@@ -4,6 +4,7 @@ import argparse
 import datetime
 import heapq
 import json
+import logging
 import os
 import re
 import string
@@ -16,6 +17,8 @@ from typing import Optional
 import matplotlib.pyplot as plt  # type: ignore[import-untyped]
 import seaborn as sns
 from pydriller import Commit, ModifiedFile, Repository  # type: ignore[import-not-found]
+
+logger = logging.getLogger('GitActivity')
 
 
 @dataclass
@@ -53,13 +56,13 @@ def _extract_modification_stats(modification: ModifiedFile,
 
 def _extract_authors_from_commit(commit: Commit) -> list[str]:
     authors = [commit.author.email]
-    show = False
+
     for raw_line in commit.msg.splitlines():
         line = raw_line.strip().lower()
 
         if line.startswith(('author:', 'authors:')):
             authors = [author.strip() for author in line[8:].split(',')]
-            print(line)
+            logger.info('Found author list: %s', line)
 
         elif line.startswith('co-authored-by:') and '<' in line:
             # Co author lines have the form:
@@ -68,18 +71,18 @@ def _extract_authors_from_commit(commit: Commit) -> list[str]:
             name_end = line.index('>')
             name = line[name_start: name_end]
             authors.append(name)
-            print('Detected co-author: ', name)
+            logger.info('Found GitHub co-author: %s', name)
 
         elif '@' in line or 'pair' in line or 'Pair' in line:
             show = True
-            print(line)
+            logger.warning('Found unexpected @: ', line)
 
-    if show:
-        print(commit.hash)
-        print(commit.msg)
-        print(authors)
+    authors = list(set(authors))
 
-    return list(set(authors))
+    logger.debug('Extracted authors: %.7s, %s, %s',
+                 commit.hash, authors, commit.msg.replace('\n', '-'))
+
+    return authors
 
 
 def _extract_contributions_from_commit(commit: Commit,
@@ -157,7 +160,7 @@ def _plot_contributions(commits: list[_CommitInfo],
                         begin_time: Optional[datetime.datetime],
                         end_time: Optional[datetime.datetime]) -> None:
     if not commits:
-        print('There are no commits to plot!')
+        logger.warning('There are no commits to plot!')
         return
     if not begin_time:
         begin_time = commits[0].timestamp
@@ -167,7 +170,7 @@ def _plot_contributions(commits: list[_CommitInfo],
     number_of_days = (end_time - begin_time).days
 
     if number_of_days < _DAYS_PER_TICK:
-        print('Too few days of active work to plot commits over time')
+        logger.warning('Too few days of active work to plot commits over time')
         return
 
     as_list = [_PlottableInfo(student,
@@ -287,6 +290,12 @@ def _print_sized_commit(commit: Commit) -> None:
 PATH_EXCLUSION_FILE = '.pathexclusion'
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger('pydriller.repository').disabled = True
+    logging.getLogger('matplotlib.font_manager').disabled = True
+    logging.getLogger('git.cmd').disabled = True
+    logging.getLogger('PIL.PngImagePlugin').disabled = True
+
     parser = _build_arg_parser()
     args = parser.parse_args()
 
@@ -308,8 +317,7 @@ def main() -> None:
         base = excluded_paths + '|' if excluded_paths else ''
         with open(PATH_EXCLUSION_FILE) as infile:
             excluded_paths = base + '|'.join(x.strip() for x in infile.readlines())
-        print('Building Exclusion')
-        print(excluded_paths)
+        logger.info('Loaded Exclusion: %s', excluded_paths)
 
     path_filter = re.compile(excluded_paths) if excluded_paths else None
     should_count = _FILTERS[args.projectkind]
