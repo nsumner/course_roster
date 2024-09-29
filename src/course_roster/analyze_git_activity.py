@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
-import matplotlib.pyplot as plt  # type: ignore[import]
-import seaborn as sns  # type: ignore[import]
-from pydriller import Commit, ModifiedFile, Repository  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
+import seaborn as sns
+from pydriller import Commit, ModifiedFile, Repository  # type: ignore[import-not-found]
 
 
 @dataclass
@@ -47,7 +47,7 @@ def extract_modification_stats(modification: ModifiedFile,
                                configuration: ProjectConfiguration) -> ModificationInfo:
     lines_added     = configuration.count_nontrivial(modification.diff_parsed['added'])
     methods_changed = len(modification.changed_methods)
-    passes_quality  = configuration.passes_quality(modification)
+    passes_quality  = configuration.passes_quality(modification) # noqa: F841
     return ModificationInfo(lines_added, methods_changed, 0)
 
 
@@ -57,7 +57,7 @@ def extract_authors_from_commit(commit: Commit) -> list[str]:
     for raw_line in commit.msg.splitlines():
         line = raw_line.strip().lower()
 
-        if line.startswith('author:') or line.startswith('authors:'):
+        if line.startswith(('author:', 'authors:')):
             authors = [author.strip() for author in line[8:].split(',')]
             print(line)
 
@@ -79,7 +79,7 @@ def extract_authors_from_commit(commit: Commit) -> list[str]:
         print(commit.msg)
         print(authors)
 
-    return set(authors)
+    return list(set(authors))
 
 
 def extract_contributions_from_commit(commit: Commit,
@@ -114,7 +114,7 @@ def compute_per_student(commits: list[CommitInfo],
     student_data = defaultdict(list)
     for commit in commits:
         for student in commit.authors:
-            name = student if student not in alias_map else alias_map[student]
+            name = alias_map.get(student, student)
             student_data[name].append(commit)
     return student_data
 
@@ -123,7 +123,7 @@ def contributed_lines(commit: CommitInfo) -> float:
     return commit.modified.lines_added/float(len(commit.authors))
 
 
-FILTERS = {
+FILTERS: dict[Optional[str], Callable[[ModifiedFile], bool]] = {
     'cpp':  lambda m: any(m.filename.lower().endswith(suffix)
                           for suffix in ('.h', '.hpp', '.cpp', '.cxx', '.cc', '.c')),
     'java': lambda m: m.filename.lower().endswith('.java'),
@@ -151,6 +151,8 @@ class PlottableInfo:
     bucket: int
 
 
+DAYS_PER_TICK = 5
+
 def plot_contributions(commits: list[CommitInfo],
                        begin_time: Optional[datetime.datetime],
                        end_time: Optional[datetime.datetime]) -> None:
@@ -163,7 +165,7 @@ def plot_contributions(commits: list[CommitInfo],
         end_time = commits[-1].timestamp
 
     number_of_days = (end_time - begin_time).days
-    if number_of_days < 5:
+    if number_of_days < DAYS_PER_TICK:
         print('Too few days of active work to plot commits over time')
         return
 
@@ -187,7 +189,7 @@ def plot_contributions(commits: list[CommitInfo],
                     element='poly',
                     bins=int(number_of_days/2))
 
-    ticks = list(range(0,number_of_days+1, int(number_of_days/5)))
+    ticks = list(range(0,number_of_days+1, int(number_of_days/DAYS_PER_TICK)))
     g.set(xlim=(0,number_of_days + 1), xticks=ticks,
           xticklabels=[str(begin_time.date() + timedelta(days=x)) for x in ticks])
     g.set_xticklabels(rotation=30)
@@ -248,7 +250,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help='Project kind used to determine file filters, quality checks, etc.',
                         choices=[key for key in FILTERS if key])
     parser.add_argument('--pathexclusion',
-                        help='Regular expression that matches paths of files that should be excluded, e.g. \'json|net\'')
+                        help='Regular expression that matches paths of files that should be excluded, e.g. \'json|net\'') # noqa: E501
     parser.add_argument('--aliases',
                         help='Map some email addresses to others, e.g \'{"hmm@email.com": "hmm@sfu.ca"}\'', # noqa: E501
                         type=json.loads)
@@ -278,7 +280,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def print_sized_commit(commit: Commit) -> None:
     print(' {:>6} {} {}'.format(commit.modified.lines_added,
                                 commit.hash,
-                                ', '.join(commit.authors))) # noqa: E501
+                                ', '.join(commit.authors)))
 
 
 PATH_EXCLUSION_FILE = '.pathexclusion'

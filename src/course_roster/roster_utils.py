@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Optional, TypeAlias, TypeVar
 
-import pandas as pd  # type: ignore[import]
+import pandas as pd  # type: ignore[import-untyped]
 
 from . import roster
 
@@ -25,7 +25,7 @@ Grouper: TypeAlias = Callable[[roster.Roster, str, int], None]
 
 def _strip_diacritics(string: str) -> str:
     normalized = unicodedata.normalize('NFKD', string)
-    return u"".join(c for c in normalized if not unicodedata.combining(c))
+    return "".join(c for c in normalized if not unicodedata.combining(c))
 
 
 T = TypeVar('T')

@@ -12,29 +12,29 @@ from dataclasses import dataclass
 from math import ceil
 from typing import Optional, TypeAlias
 
-import matplotlib as mpl  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
-import matplotlib.text as mpltext  # type: ignore[import]
+import matplotlib as mpl  # type: ignore[import-untyped]
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]
+import matplotlib.text as mpltext  # type: ignore[import-untyped]
 import numpy as np
-import pandas as pd  # type: ignore[import]
-import seaborn as sns  # type: ignore[import]
-from matplotlib.backends.backend_pdf import PdfPages  # type: ignore[import]
+import pandas as pd  # type: ignore[import-untyped]
+import seaborn as sns
+from matplotlib.backends.backend_pdf import PdfPages  # type: ignore[import-untyped]
 from tqdm import tqdm
 
 from . import roster
 
 # Optional dependencies require a bit more care
 try:
-    from wordcloud import WordCloud  # type: ignore[import]
+    from wordcloud import WordCloud  # type: ignore[import-untyped]
 except ImportError:
     _HAS_WORDCLOUD = False
 else:
     _HAS_WORDCLOUD = True
 
 try:
-    from sumy.nlp.tokenizers import Tokenizer as SumyTokenizer  # type: ignore[import]
-    from sumy.parsers.plaintext import PlaintextParser as SumyParser  # type: ignore[import]
-    from sumy.summarizers.lsa import LsaSummarizer as SumySummarizer  # type: ignore[import]
+    from sumy.nlp.tokenizers import Tokenizer as SumyTokenizer  # type: ignore[import-not-found]
+    from sumy.parsers.plaintext import PlaintextParser as SumyParser  # type: ignore[import-not-found]
+    from sumy.summarizers.lsa import LsaSummarizer as SumySummarizer  # type: ignore[import-not-found]
 except ImportError:
     _HAS_SUMY = False
 else:

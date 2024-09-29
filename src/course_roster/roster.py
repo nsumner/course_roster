@@ -9,7 +9,7 @@ from json import dumps as dump_json
 from math import ceil
 from typing import Optional, Self, Union
 
-import pandas as pd  # type: ignore[import]
+import pandas as pd  # type: ignore[import-untyped]
 
 #############################################################################
 # Core Roster
@@ -17,7 +17,7 @@ import pandas as pd  # type: ignore[import]
 
 IDList = list[str]
 GroupName = str
-Path = Union[str, bytes, os.PathLike]
+Path = Union[str, bytes, os.PathLike[str]]
 
 
 @dataclass
