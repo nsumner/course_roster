@@ -24,7 +24,7 @@ class ModificationInfo:
     methods_changed: int
     issues: int
 
-    def __add__(self, other: ModificationInfo) -> ModificationInfo:
+    def __add__(self, other: 'ModificationInfo') -> 'ModificationInfo':
         return ModificationInfo(self.lines_added + other.lines_added,
                                 self.methods_changed + other.methods_changed,
                                 self.issues + other.issues)
@@ -55,19 +55,31 @@ def extract_authors_from_commit(commit: Commit) -> list[str]:
     authors = [commit.author.email]
     show = False
     for raw_line in commit.msg.splitlines():
-        line = raw_line.strip()
-        if line.startswith('authors:'):
-            print(line)
+        line = raw_line.strip().lower()
+
+        if line.startswith('author:') or line.startswith('authors:'):
             authors = [author.strip() for author in line[8:].split(',')]
-        if '@' in line or 'pair' in line or 'Pair' in line:
             print(line)
+
+        elif line.startswith('co-authored-by:') and '<' in line:
+            # Co author lines have the form:
+            #   name <###+username@users.noreply.github.sfu.ca>
+            name_start = line.index('<') + 1
+            name_end = line.index('>')
+            name = line[name_start: name_end]
+            authors.append(name)
+            print('Detected co-author: ', name)
+
+        elif '@' in line or 'pair' in line or 'Pair' in line:
             show = True
+            print(line)
 
     if show:
         print(commit.hash)
         print(commit.msg)
+        print(authors)
 
-    return authors
+    return set(authors)
 
 
 def extract_contributions_from_commit(commit: Commit,
@@ -77,7 +89,6 @@ def extract_contributions_from_commit(commit: Commit,
         return None
 
     timestamp = commit.author_date
-    hash = commit.hash
     authors = extract_authors_from_commit(commit)
 
     mod_info = sum((extract_modification_stats(modification, configuration)
@@ -85,7 +96,7 @@ def extract_contributions_from_commit(commit: Commit,
                    start=ModificationInfo(0,0,0))
 
     return CommitInfo(mod_info, #.lines_added, mod_info.methods_changed, mod_info.issues,
-                      authors, timestamp, hash)
+                      authors, timestamp, commit.hash)
 
 
 # This function aggregates the contributions from different commits into a
@@ -152,6 +163,9 @@ def plot_contributions(commits: list[CommitInfo],
         end_time = commits[-1].timestamp
 
     number_of_days = (end_time - begin_time).days
+    if number_of_days < 5:
+        print('Too few days of active work to plot commits over time')
+        return
 
     as_list = [PlottableInfo(student,
                              contributed_lines(commit),
@@ -234,8 +248,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help='Project kind used to determine file filters, quality checks, etc.',
                         choices=[key for key in FILTERS if key])
     parser.add_argument('--pathexclusion',
-                        help='Regular expression that matches paths of files that should be excluded, e.g. \'json|net\'', # noqa: E501
-                        type=re.compile)
+                        help='Regular expression that matches paths of files that should be excluded, e.g. \'json|net\'')
     parser.add_argument('--aliases',
                         help='Map some email addresses to others, e.g \'{"hmm@email.com": "hmm@sfu.ca"}\'', # noqa: E501
                         type=json.loads)
@@ -262,28 +275,44 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def print_sized_commit(commit: Commit) -> None:
+    print(' {:>6} {} {}'.format(commit.modified.lines_added,
+                                commit.hash,
+                                ', '.join(commit.authors))) # noqa: E501
+
+
+PATH_EXCLUSION_FILE = '.pathexclusion'
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    begin_time    = args.begin
-    end_time      = args.end
-    repo_path     = args.repo
-    branch        = args.branch
-    topk          = args.topk
-    max_size      = args.maxsize
-    path_filter   = args.pathexclusion
-    strip_domains = args.stripdomains
-    aliases       = args.aliases
-    explicit      = args.explicitlist
-    remotes       = args.remotes
+    begin_time     = args.begin
+    end_time       = args.end
+    repo_path      = args.repo
+    branch         = args.branch
+    topk           = args.topk
+    max_size       = args.maxsize
+    excluded_paths = args.pathexclusion
+    strip_domains  = args.stripdomains
+    aliases        = args.aliases
+    explicit       = args.explicitlist
+    remotes        = args.remotes
     if not aliases or not isinstance(aliases, dict):
         aliases = {}
 
+    if os.path.exists(PATH_EXCLUSION_FILE):
+        base = excluded_paths + '|' if excluded_paths else ''
+        with open(PATH_EXCLUSION_FILE) as infile:
+            excluded_paths = base + '|'.join(x.strip() for x in infile.readlines())
+        print('Building Exclusion')
+        print(excluded_paths)
+
+    path_filter = re.compile(excluded_paths) if excluded_paths else None
     should_count = FILTERS[args.projectkind]
     def count_filter(m: ModifiedFile) -> bool:
         return (should_count(m)
-            and not (path_filter and m.new_path and path_filter.match(m.new_path)))
+            and not (path_filter and m.new_path and path_filter.search(m.new_path)))
     configuration = ProjectConfiguration(count_filter,
                                          lambda m: True,
                                          count_nontrivial_changes_in_cpp)
@@ -309,7 +338,13 @@ def main() -> None:
         commits = extract_explicit_commits_from_repo(explicit_commits, repo, configuration)
 
     if max_size:
+        oversized = [commit for commit in commits if commit.modified.lines_added >= max_size]
         commits = [commit for commit in commits if commit.modified.lines_added < max_size]
+        if oversized:
+            print('Skipping overly large commits')
+            for commit in oversized:
+                print_sized_commit(commit)
+
     if strip_domains:
         for commit in commits:
             commit.authors = [author.split('@')[0] for author in commit.authors]
@@ -327,7 +362,7 @@ def main() -> None:
     print('=====================')
     largest = heapq.nlargest(topk, commits, key=lambda c: c.modified.lines_added)
     for commit in largest:
-        print(' {:>6} {} {}'.format(commit.modified.lines_added, commit.hash, ', '.join(commit.authors))) # noqa: E501
+        print_sized_commit(commit)
 
     # Plot out the contributions over time
     plot_contributions(commits, begin_time, end_time)
