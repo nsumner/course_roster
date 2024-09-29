@@ -74,8 +74,7 @@ def _extract_authors_from_commit(commit: Commit) -> list[str]:
             logger.info('Found GitHub co-author: %s', name)
 
         elif '@' in line or 'pair' in line or 'Pair' in line:
-            show = True
-            logger.warning('Found unexpected @: ', line)
+            logger.warning('Found unexpected @: %s', line)
 
     authors = list(set(authors))
 
@@ -287,14 +286,18 @@ def _print_sized_commit(commit: Commit) -> None:
                                 ', '.join(commit.authors)))
 
 
-PATH_EXCLUSION_FILE = '.pathexclusion'
-
-def main() -> None:
+def _configure_logging() -> None:
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('pydriller.repository').disabled = True
     logging.getLogger('matplotlib.font_manager').disabled = True
     logging.getLogger('git.cmd').disabled = True
     logging.getLogger('PIL.PngImagePlugin').disabled = True
+
+
+PATH_EXCLUSION_FILE = '.pathexclusion'
+
+def main() -> None:
+    _configure_logging()
 
     parser = _build_arg_parser()
     args = parser.parse_args()
