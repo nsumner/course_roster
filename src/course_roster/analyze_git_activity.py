@@ -19,39 +19,39 @@ from pydriller import Commit, ModifiedFile, Repository  # type: ignore[import-no
 
 
 @dataclass
-class ModificationInfo:
+class _ModificationInfo:
     lines_added: int
     methods_changed: int
     issues: int
 
-    def __add__(self, other: 'ModificationInfo') -> 'ModificationInfo':
-        return ModificationInfo(self.lines_added + other.lines_added,
+    def __add__(self, other: '_ModificationInfo') -> '_ModificationInfo':
+        return _ModificationInfo(self.lines_added + other.lines_added,
                                 self.methods_changed + other.methods_changed,
                                 self.issues + other.issues)
 
 @dataclass
-class CommitInfo:
-    modified: ModificationInfo
+class _CommitInfo:
+    modified: _ModificationInfo
     authors: list[str]
     timestamp: datetime.datetime
     hash: str
 
 @dataclass
-class ProjectConfiguration:
+class _ProjectConfiguration:
     should_count: Callable[[ModifiedFile], bool]
     passes_quality: Callable[[ModifiedFile], bool]
     count_nontrivial: Callable[[ModifiedFile], int]
 
 
-def extract_modification_stats(modification: ModifiedFile,
-                               configuration: ProjectConfiguration) -> ModificationInfo:
+def _extract_modification_stats(modification: ModifiedFile,
+                                configuration: _ProjectConfiguration) -> _ModificationInfo:
     lines_added     = configuration.count_nontrivial(modification.diff_parsed['added'])
     methods_changed = len(modification.changed_methods)
     passes_quality  = configuration.passes_quality(modification) # noqa: F841
-    return ModificationInfo(lines_added, methods_changed, 0)
+    return _ModificationInfo(lines_added, methods_changed, 0)
 
 
-def extract_authors_from_commit(commit: Commit) -> list[str]:
+def _extract_authors_from_commit(commit: Commit) -> list[str]:
     authors = [commit.author.email]
     show = False
     for raw_line in commit.msg.splitlines():
@@ -82,35 +82,35 @@ def extract_authors_from_commit(commit: Commit) -> list[str]:
     return list(set(authors))
 
 
-def extract_contributions_from_commit(commit: Commit,
-                                      configuration: ProjectConfiguration) -> Optional[CommitInfo]:
+def _extract_contributions_from_commit(commit: Commit,
+                                       configuration: _ProjectConfiguration) -> Optional[_CommitInfo]: # noqa: E501
     modifications = [m for m in commit.modified_files if configuration.should_count(m)]
     if not modifications:
         return None
 
     timestamp = commit.author_date
-    authors = extract_authors_from_commit(commit)
+    authors = _extract_authors_from_commit(commit)
 
-    mod_info = sum((extract_modification_stats(modification, configuration)
+    mod_info = sum((_extract_modification_stats(modification, configuration)
                    for modification in modifications),
-                   start=ModificationInfo(0,0,0))
+                   start=_ModificationInfo(0,0,0))
 
-    return CommitInfo(mod_info, #.lines_added, mod_info.methods_changed, mod_info.issues,
+    return _CommitInfo(mod_info, #.lines_added, mod_info.methods_changed, mod_info.issues,
                       authors, timestamp, commit.hash)
 
 
 # This function aggregates the contributions from different commits into a
 # single summary of the overall contributions to the repo.
 #    Callable[[ModifiedFile], bool]
-def extract_commits_from_repo(repo: Repository,
-                              configuration: ProjectConfiguration) -> list[CommitInfo]:
-    commits = (extract_contributions_from_commit(commit, configuration)
+def _extract_commits_from_repo(repo: Repository,
+                               configuration: _ProjectConfiguration) -> list[_CommitInfo]:
+    commits = (_extract_contributions_from_commit(commit, configuration)
                for commit in repo.traverse_commits())
     return [commit for commit in commits if commit]
 
 
-def compute_per_student(commits: list[CommitInfo],
-                        alias_map: dict[str, str]) -> dict[str, list[CommitInfo]]:
+def _compute_per_student(commits: list[_CommitInfo],
+                         alias_map: dict[str, str]) -> dict[str, list[_CommitInfo]]:
     student_data = defaultdict(list)
     for commit in commits:
         for student in commit.authors:
@@ -119,11 +119,11 @@ def compute_per_student(commits: list[CommitInfo],
     return student_data
 
 
-def contributed_lines(commit: CommitInfo) -> float:
+def _contributed_lines(commit: _CommitInfo) -> float:
     return commit.modified.lines_added/float(len(commit.authors))
 
 
-FILTERS: dict[Optional[str], Callable[[ModifiedFile], bool]] = {
+_FILTERS: dict[Optional[str], Callable[[ModifiedFile], bool]] = {
     'cpp':  lambda m: any(m.filename.lower().endswith(suffix)
                           for suffix in ('.h', '.hpp', '.cpp', '.cxx', '.cc', '.c')),
     'java': lambda m: m.filename.lower().endswith('.java'),
@@ -133,7 +133,7 @@ FILTERS: dict[Optional[str], Callable[[ModifiedFile], bool]] = {
 
 # NOTE: A preferred approach would be to apply a semantic diff, remove comments, and observe
 #  additions that way
-def count_nontrivial_changes_in_cpp(changes: list[ModifiedFile]) -> int:
+def _count_nontrivial_changes_in_cpp(changes: list[ModifiedFile]) -> int:
     translator = str.maketrans('', '', string.punctuation + string.whitespace)
     def is_nontrivial(line: str) -> bool:
         line = line.strip()
@@ -145,17 +145,17 @@ def count_nontrivial_changes_in_cpp(changes: list[ModifiedFile]) -> int:
 
 
 @dataclass
-class PlottableInfo:
+class _PlottableInfo:
     student: str
     count: float
     bucket: int
 
 
-DAYS_PER_TICK = 5
+_DAYS_PER_TICK = 5
 
-def plot_contributions(commits: list[CommitInfo],
-                       begin_time: Optional[datetime.datetime],
-                       end_time: Optional[datetime.datetime]) -> None:
+def _plot_contributions(commits: list[_CommitInfo],
+                        begin_time: Optional[datetime.datetime],
+                        end_time: Optional[datetime.datetime]) -> None:
     if not commits:
         print('There are no commits to plot!')
         return
@@ -165,13 +165,14 @@ def plot_contributions(commits: list[CommitInfo],
         end_time = commits[-1].timestamp
 
     number_of_days = (end_time - begin_time).days
-    if number_of_days < DAYS_PER_TICK:
+
+    if number_of_days < _DAYS_PER_TICK:
         print('Too few days of active work to plot commits over time')
         return
 
-    as_list = [PlottableInfo(student,
-                             contributed_lines(commit),
-                             (commit.timestamp - begin_time).days)
+    as_list = [_PlottableInfo(student,
+                              _contributed_lines(commit),
+                              (commit.timestamp - begin_time).days)
                  for commit in commits
                  for student in commit.authors]
     as_map = {
@@ -189,7 +190,7 @@ def plot_contributions(commits: list[CommitInfo],
                     element='poly',
                     bins=int(number_of_days/2))
 
-    ticks = list(range(0,number_of_days+1, int(number_of_days/DAYS_PER_TICK)))
+    ticks = list(range(0,number_of_days+1, int(number_of_days/_DAYS_PER_TICK)))
     g.set(xlim=(0,number_of_days + 1), xticks=ticks,
           xticklabels=[str(begin_time.date() + timedelta(days=x)) for x in ticks])
     g.set_xticklabels(rotation=30)
@@ -198,28 +199,28 @@ def plot_contributions(commits: list[CommitInfo],
     plt.show()
 
 
-def parse_explicit_line(explicit_line: str) -> tuple[str, list[str]]:
+def _parse_explicit_line(explicit_line: str) -> tuple[str, list[str]]:
     tokens = explicit_line.replace(',', ' ').split()
     hash_id = tokens[0].strip().lower()
     authors = [name.strip().lower() for name in tokens[1:]]
     return (hash_id, authors)
 
 
-def read_explicit_map(explicit_path: str) -> dict[str, list[str]]:
+def _read_explicit_map(explicit_path: str) -> dict[str, list[str]]:
     explicit_map = {}
     with open(explicit_path) as infile:
         for line in infile:
             if not line.strip():
                 continue
-            hash_id, authors = parse_explicit_line(line)
+            hash_id, authors = _parse_explicit_line(line)
             explicit_map[hash_id] = authors
     return explicit_map
 
 
-def extract_explicit_commits_from_repo(explicit: dict[str, list[str]],
-                                       repo: Repository,
-                                       configuration: ProjectConfiguration) -> list[CommitInfo]:
-    commits = [extract_contributions_from_commit(commit, configuration)
+def _extract_explicit_commits_from_repo(explicit: dict[str, list[str]],
+                                        repo: Repository,
+                                        configuration: _ProjectConfiguration) -> list[_CommitInfo]:
+    commits = [_extract_contributions_from_commit(commit, configuration)
                for commit in repo.traverse_commits()
                if commit.hash in explicit]
     for commit in commits:
@@ -228,19 +229,19 @@ def extract_explicit_commits_from_repo(explicit: dict[str, list[str]],
     return [commit for commit in commits if commit]
 
 
-def parse_time(date_string: str) -> datetime.datetime:
+def _parse_time(date_string: str) -> datetime.datetime:
     return (datetime.datetime.strptime(date_string, '%Y-%m-%d')
                              .replace(tzinfo=datetime.timezone.utc))
 
-def build_arg_parser() -> argparse.ArgumentParser:
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument('--begin',
                         help='Starting time in YYYY-MM-DD at midnight (Defaults to beginning of repo)', # noqa: E501
-                        type=parse_time)
+                        type=_parse_time)
     parser.add_argument('--end',
                         help='Ending time in YYY-MM-DD at midnight (Defaults to present time)',
                         default=datetime.datetime.now(datetime.timezone.utc),
-                        type=parse_time)
+                        type=_parse_time)
     parser.add_argument('--repo',
                         help='Location of git repository (Defaults to current directory)',
                         default=os.getcwd())
@@ -248,7 +249,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help='If only one branch should be included, the name of that branch (None by default)') # noqa: E501
     parser.add_argument('--projectkind',
                         help='Project kind used to determine file filters, quality checks, etc.',
-                        choices=[key for key in FILTERS if key])
+                        choices=[key for key in _FILTERS if key])
     parser.add_argument('--pathexclusion',
                         help='Regular expression that matches paths of files that should be excluded, e.g. \'json|net\'') # noqa: E501
     parser.add_argument('--aliases',
@@ -277,7 +278,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def print_sized_commit(commit: Commit) -> None:
+def _print_sized_commit(commit: Commit) -> None:
     print(' {:>6} {} {}'.format(commit.modified.lines_added,
                                 commit.hash,
                                 ', '.join(commit.authors)))
@@ -286,7 +287,7 @@ def print_sized_commit(commit: Commit) -> None:
 PATH_EXCLUSION_FILE = '.pathexclusion'
 
 def main() -> None:
-    parser = build_arg_parser()
+    parser = _build_arg_parser()
     args = parser.parse_args()
 
     begin_time     = args.begin
@@ -311,13 +312,13 @@ def main() -> None:
         print(excluded_paths)
 
     path_filter = re.compile(excluded_paths) if excluded_paths else None
-    should_count = FILTERS[args.projectkind]
+    should_count = _FILTERS[args.projectkind]
     def count_filter(m: ModifiedFile) -> bool:
         return (should_count(m)
             and not (path_filter and m.new_path and path_filter.search(m.new_path)))
-    configuration = ProjectConfiguration(count_filter,
+    configuration = _ProjectConfiguration(count_filter,
                                          lambda m: True,
-                                         count_nontrivial_changes_in_cpp)
+                                         _count_nontrivial_changes_in_cpp)
 
 
     repo = Repository(repo_path, since=begin_time, to=end_time, only_in_branch=branch)
@@ -328,16 +329,16 @@ def main() -> None:
                           to=end_time,
                           only_in_branch=branch,
                           include_remotes=remotes)
-        commits = extract_commits_from_repo(repo, configuration)
+        commits = _extract_commits_from_repo(repo, configuration)
     else:
-        explicit_commits = read_explicit_map(explicit)
+        explicit_commits = _read_explicit_map(explicit)
         repo = Repository(repo_path,
                           since=begin_time,
                           to=end_time,
                           only_commits=list(explicit_commits.keys()),
                           include_remotes=True,
                           include_refs=True)
-        commits = extract_explicit_commits_from_repo(explicit_commits, repo, configuration)
+        commits = _extract_explicit_commits_from_repo(explicit_commits, repo, configuration)
 
     if max_size:
         oversized = [commit for commit in commits if commit.modified.lines_added >= max_size]
@@ -345,29 +346,29 @@ def main() -> None:
         if oversized:
             print('Skipping overly large commits')
             for commit in oversized:
-                print_sized_commit(commit)
+                _print_sized_commit(commit)
 
     if strip_domains:
         for commit in commits:
             commit.authors = [author.split('@')[0] for author in commit.authors]
 
-    per_student = compute_per_student(commits, aliases)
+    per_student = _compute_per_student(commits, aliases)
 
     # Print out the student contributions ordered by ID
     print('\nStudent Contributions')
     print('=====================')
     for student in sorted(per_student.keys()):
-        print(student, sum(contributed_lines(commit) for commit in per_student[student]))
+        print(student, sum(_contributed_lines(commit) for commit in per_student[student]))
 
     # Print out the top K commits
     print('\nLargest Commits')
     print('=====================')
     largest = heapq.nlargest(topk, commits, key=lambda c: c.modified.lines_added)
     for commit in largest:
-        print_sized_commit(commit)
+        _print_sized_commit(commit)
 
     # Plot out the contributions over time
-    plot_contributions(commits, begin_time, end_time)
+    _plot_contributions(commits, begin_time, end_time)
 
 
 if __name__ == '__main__':
