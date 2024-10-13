@@ -41,13 +41,14 @@ def _sorted_by_group(groups: Sequence[tuple[str, T]]) -> Generator[tuple[str,T],
 #############################################################################
 
 class Action(StrEnum):
-    SAVE                 = 'save'
-    ASSIGN_GROUPS        = 'assign-groups'
-    ASSIGN_ACROSS_GROUPS = 'assign-across-groups'
-    MERGE_FROM_ASSIGNED  = 'merge-from-assigned'
-    SHOW_JSON_GROUPS     = 'show-json-groups'
-    SHOW_READABLE_GROUPS = 'show-readable-groups'
+    SAVE                    = 'save'
+    ASSIGN_GROUPS           = 'assign-groups'
+    ASSIGN_ACROSS_GROUPS    = 'assign-across-groups'
+    MERGE_FROM_ASSIGNED     = 'merge-from-assigned'
+    SHOW_JSON_GROUPS        = 'show-json-groups'
+    SHOW_READABLE_GROUPS    = 'show-readable-groups'
     SHOW_EMAILS_FOR_GROUPS  = 'show-emails-for-groups'
+    SHOW_CROWDMARK          = 'show-crowdmark'
 
 
 def _assign_groups(students: roster.Roster,
@@ -90,6 +91,7 @@ def _show_readable_groups(students: roster.Roster,
                            + members[roster.Roster.Field.LAST_NAME.value]).tolist())
         print(names)
         print()
+
 
 def _show_emails_for_groups(students: roster.Roster,
                       group_column: str) -> None:
@@ -150,6 +152,25 @@ def _combine_text(sources: list[str], output_path: str) -> None:
         for source in sources:
             with open(source) as infile:
                 outfile.writelines(infile.readlines())
+
+
+def _show_crowdmark(students: roster.Roster) -> None:
+    columns = [
+        roster.Roster.Field.LAST_NAME.value,
+        roster.Roster.Field.PREFERRED_NAME.value,
+        roster.Roster.Field.EMAIL.value,
+    ]
+    column_rename = {
+        roster.Roster.Field.LAST_NAME.value: 'Last Name',
+        roster.Roster.Field.PREFERRED_NAME.value: 'First Name',
+        roster.Roster.Field.EMAIL.value: 'Email',
+    }
+
+    selected = students.table[columns]
+    selected.loc[:,roster.Roster.Field.EMAIL.value] = selected[roster.Roster.Field.EMAIL.value] + '@sfu.ca'
+    crowdmark = selected.rename(columns=column_rename)
+    crowdmark.index.names = ['Student ID Number']
+    print(crowdmark.to_csv(index=True))
 
 
 #############################################################################
@@ -367,6 +388,9 @@ def main() -> None:
 
         case Action.SHOW_EMAILS_FOR_GROUPS.value:
             _show_emails_for_groups(roster_info.students, group_column)
+
+        case Action.SHOW_CROWDMARK.value:
+            _show_crowdmark(roster_info.students)
 
 
 if __name__ == '__main__':
