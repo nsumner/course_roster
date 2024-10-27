@@ -55,7 +55,9 @@ def _extract_modification_stats(modification: ModifiedFile,
 
 
 def _extract_authors_from_commit(commit: Commit) -> list[str]:
-    authors = [commit.author.email]
+    # Default to using email addresses if they are available, but fall back
+    # to names if necessary.
+    authors = [commit.author.email] if commit.author.email else [commit.author.name]
 
     for raw_line in commit.msg.splitlines():
         line = raw_line.strip().lower()
