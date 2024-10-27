@@ -77,6 +77,8 @@ WRITTEN = [
      "What went poorly?"),
     ("othercomments",
      "Are there any other issues you have encountered or comments that you have so far?"),
+    ("teamcomments",
+     "What comments would you share with your team?"),
 ]
 
 
@@ -126,6 +128,7 @@ class TexWrappedText(mpltext.Text):  # type: ignore[misc]
                  text: str = '',
                  width: str = '2cm',
                  **kwargs) -> None:
+        text = text.replace('&', '\\&')
         mpltext.Text.__init__(self, x=x, y=y, text=text, wrap=True, **kwargs)
         self.width = width
 
@@ -320,7 +323,8 @@ LATEX_SANITIZING_TRANSLATION = str.maketrans({
 
 def text_response_summary_page(context: AnalysisContext) -> None:
     texts = [(prompt, ' '.join(context.results[key].tolist()).strip())
-             for key, prompt in context.config.written]
+             for key, prompt in context.config.written
+             if key != 'teamcomments']
 
     figure = plt.figure()
     figure.suptitle(f'Summaries for {context.group_name}', fontsize=12)
@@ -358,6 +362,11 @@ def summarize_group(context: AnalysisContext) -> None:
     text_response_summary_page(context)
     context.pdf.savefig()
     plt.close()
+
+    team_comments = context.results['teamcomments'].tolist()
+    random.shuffle(team_comments)
+    with open(f'{context.group_name}.txt', 'w') as outfile:
+        outfile.write('\n'.join(team_comments))
 
 
 def analyze_individuals(context: AnalysisContext) -> None:
